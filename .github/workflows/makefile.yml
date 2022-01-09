@@ -1,0 +1,19 @@
+name: Go CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: golang:1.17
+
+    steps:    
+    - name: lint check syntax
+      run: make lint
+      
+    - name: test code
+      run: make test
