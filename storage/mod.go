@@ -29,7 +29,10 @@ type Store interface {
 
 	Len() int
 
-	// Calls the function on each key/value pair. Aborts if the function returns
-	// false.
+	GetKeys() []string
+
+	GetValues() [][]byte
+
+	// ForEach calls the function on each key/value pair. Aborts if the function returns false.
 	ForEach(func(key string, val []byte) bool)
 }

@@ -91,6 +91,28 @@ func (s *store) ForEach(f func(key string, val []byte) bool) {
 	}
 }
 
+// GetKeys returns all keys in the store
+func (s *store) GetKeys() []string {
+	keys := make([]string, 0)
+	s.Lock()
+	defer s.Unlock()
+	for key := range s.data {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// GetValues returns all values in the store
+func (s *store) GetValues() [][]byte {
+	values := make([][]byte, 0)
+	s.Lock()
+	defer s.Unlock()
+	for _, value := range s.data {
+		values = append(values, value[:])
+	}
+	return values
+}
+
 // Len implements storage.Store
 func (s *store) Len() int {
 	s.Lock()

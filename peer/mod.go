@@ -70,7 +70,7 @@ type Configuration struct {
 	// have a consensus. Default value is N/2 + 1
 	PaxosThreshold func(uint) int
 
-	// PaxosID is the stating ID of a Paxos proposer. It distributed starting
+	// PaxosID is the stating id of a Paxos proposer. It distributed starting
 	// from 1 to peers.
 	// Default: 0
 	PaxosID uint

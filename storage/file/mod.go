@@ -153,6 +153,52 @@ func (s *store) ForEach(f func(key string, val []byte) bool) {
 	}
 }
 
+// GetKeys returns all keys in the store
+func (s *store) GetKeys() []string {
+	keys := make([]string, 0)
+	s.Lock()
+	defer s.Unlock()
+	fileInfos, err := ioutil.ReadDir(s.folderPath)
+	if err != nil {
+		return nil
+	}
+
+	for _, fileInfo := range fileInfos {
+		if fileInfo.IsDir() {
+			continue
+		}
+
+		keys = append(keys, fileInfo.Name())
+	}
+	return keys
+}
+
+// GetValues returns all values in the store
+func (s *store) GetValues() [][]byte {
+	values := make([][]byte, 0)
+	s.Lock()
+	defer s.Unlock()
+
+	fileInfos, err := ioutil.ReadDir(s.folderPath)
+	if err != nil {
+		return nil
+	}
+
+	for _, fileInfo := range fileInfos {
+		if fileInfo.IsDir() {
+			continue
+		}
+
+		val, err := os.ReadFile(filepath.Join(s.folderPath, fileInfo.Name()))
+		if err != nil {
+			continue
+		}
+
+		values = append(values, val)
+	}
+	return values
+}
+
 // Len implements storage.Store
 func (s *store) Len() int {
 	s.Lock()

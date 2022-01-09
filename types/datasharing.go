@@ -2,6 +2,8 @@ package types
 
 import (
 	"fmt"
+	"github.com/rs/xid"
+	"regexp"
 	"strings"
 )
 
@@ -11,6 +13,11 @@ import (
 // NewEmpty implements types.Message.
 func (d DataRequestMessage) NewEmpty() Message {
 	return &DataRequestMessage{}
+}
+
+// New implements type.Message.
+func (d DataRequestMessage) New(hash string) *DataRequestMessage {
+	return &DataRequestMessage{RequestID: xid.New().String(), Key: hash}
 }
 
 // Name implements types.Message.
@@ -59,6 +66,11 @@ func (s SearchRequestMessage) NewEmpty() Message {
 	return &SearchRequestMessage{}
 }
 
+// New implements types.Message.
+func (s SearchRequestMessage) New(origin string, pattern regexp.Regexp, budget uint) *SearchRequestMessage {
+	return &SearchRequestMessage{RequestID: xid.New().String(), Origin: origin, Pattern: pattern.String(), Budget: budget}
+}
+
 // Name implements types.Message.
 func (s SearchRequestMessage) Name() string {
 	return "searchrequest"
@@ -72,6 +84,10 @@ func (s SearchRequestMessage) String() string {
 // HTML implements types.Message.
 func (s SearchRequestMessage) HTML() string {
 	return s.String()
+}
+
+func (s SearchRequestMessage) IsVoid() bool {
+	return s.RequestID == "" && s.Pattern == "" && s.Budget == 0 && s.Origin == ""
 }
 
 // -----------------------------------------------------------------------------

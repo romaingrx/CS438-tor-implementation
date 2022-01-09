@@ -24,7 +24,7 @@ type Rumor struct {
 	// Origin is the address of the node that initiated the rumor
 	Origin string
 
-	// Sequence is the unique ID of the packet from packet's creator point of
+	// Sequence is the unique id of the packet from packet's creator point of
 	// view. Each time a sender creates a packet, it must increment its sequence
 	// number and include it. Start from 1.
 	Sequence uint

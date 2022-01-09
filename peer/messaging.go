@@ -2,6 +2,7 @@ package peer
 
 import (
 	"fmt"
+	"go.dedis.ch/cs438/types"
 	"io"
 	"strings"
 	"time"
@@ -95,3 +96,6 @@ func (r RoutingTable) DisplayGraph(out io.Writer) {
 
 	fmt.Fprint(out, "}\n")
 }
+
+// ViewTable
+type ViewTable map[string][]types.Rumor
