@@ -81,6 +81,10 @@ type node struct {
 	isStopped    bool // TODO: turn this in something more beautiful (use wg value or stop channel)
 	log          *log.Logger
 	paxos        Paxos
+
+	// Circuit
+	directory 	NodesInfo
+	circuits 	Circuits
 }
 
 func (n *node) Addr() string {

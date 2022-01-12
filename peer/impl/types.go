@@ -164,3 +164,74 @@ func (m *ConcurrentCatalog) GetRandomPeerExcepted(excepted []string) string {
 	chosenPeer := rand.Intn(len(peers))
 	return peers[chosenPeer]
 }
+
+// Circuit
+
+type NodeInfo struct {
+	IP string
+	Pk []byte
+}
+
+type NodesInfo struct {
+	sync.Map
+}
+
+func (m *NodesInfo) Add(ip string, value NodeInfo) bool {
+	_, loaded := m.LoadOrStore(ip, value)
+	return !loaded
+}
+
+type Circuit struct {
+	nodes     []string
+	sharedKey map[string][]byte
+}
+
+func (c *Circuit) AmIProxy() bool {
+	return len(c.nodes) > 2
+}
+
+func (c *Circuit) AmIExit() bool {
+	return len(c.nodes) == 1
+}
+
+type Circuits struct {
+	sync.Mutex
+	circuits map[string]Circuit
+}
+
+func (c *Circuits) Get(uid string) Circuit {
+	c.Lock()
+	defer c.Unlock()
+	return c.circuits[uid]
+}
+
+func (c *Circuits) GetAll() map[string]Circuit {
+	c.Lock()
+	defer c.Unlock()
+	var cpy map[string]Circuit
+	for uid, circuit := range c.circuits {
+		cpy[uid] = circuit
+	}
+	return cpy
+}
+
+// GetProxyCircuits returns all the circuits that begins with this node
+func (c *Circuits) GetProxyCircuits() map[string]Circuit {
+	return c.Filter(func(circuit Circuit) bool { return circuit.AmIProxy() })
+}
+
+func (c *Circuits) Put(uid string, circuit Circuit) {
+	c.Lock()
+	defer c.Unlock()
+	c.circuits[uid] = circuit
+}
+
+func (c *Circuits) Filter(filter func(c Circuit) bool) map[string]Circuit {
+	var filtered map[string]Circuit
+	for uid, circuit := range c.GetAll() {
+		if filter(circuit) {
+			filtered[uid] = circuit
+		}
+	}
+	return filtered
+}
