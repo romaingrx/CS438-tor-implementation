@@ -1,13 +1,14 @@
 package impl
 
 import (
+	"math/rand"
+	"sync"
+	"time"
+
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"go.dedis.ch/cs438/utils"
-	"math/rand"
-	"sync"
-	"time"
 )
 
 // ReceivedAck contains the message and the packet received
@@ -179,6 +180,41 @@ type NodesInfo struct {
 func (m *NodesInfo) Add(ip string, value NodeInfo) bool {
 	_, loaded := m.LoadOrStore(ip, value)
 	return !loaded
+}
+
+type RelayHttpRequest struct {
+	uid             string
+	destinationIp   string
+	destinationPort string
+	requestType     string
+	data            []byte
+}
+
+// Proxy node refers to the first node trying to initiate the circuit
+// Relay node is any node that receives messages and forwards it
+// Exit node is the last node that sends the final request to an actual server
+// Relay Circuit is used in nodes that are used as relay nodes
+// Note that in the implementation a node can be both proxy and relay
+type RelayCircuit struct {
+	id            string        //Circuit ID: c1,c2,etc.
+	firstNode     NodeInfo      //Refers to the initiating node for this circuit
+	secondNode    NodeInfo      //Refers to the node on the other end of the circuit
+	beforeCircuit *RelayCircuit //Refers to prev circuit in case of middle relay, ex. c1 if this is c2 and we're in non proxy node
+	nextCircuit   *RelayCircuit // Refers to next circuit in case of non exit and non proxy node
+}
+
+// Refers to the circuit information retained by a proxy node which contains information about c1 which connects to first relay node
+// Also includes extra information including which nodes are connected and their shared keys as well as metrics used for circuit selection
+type ProxyCircuit struct {
+	RelayCircuit
+	associatedMessage   *RelayHttpRequest //In case we've actually started sending a message through this circuit
+	created             time.Time
+	lastUsed            time.Time
+	lastMetricMessage   string          //Refers to message id of the last metric message
+	lastMetricTimestamp time.Time       //Refers to the time the metric message was sent
+	currentRtt          time.Duration   //Last Round trip recorded for this circuit
+	rttMin              time.Duration   //Mininmum RTT recorded for this circuit
+	ctt                 []time.Duration //last 5 Congestion time recordings; Ctt = Rtt - Rtt_Min
 }
 
 type Circuit struct {
