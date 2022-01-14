@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"github.com/monnand/dhkx"
 	"golang.org/x/xerrors"
+	"reflect"
 )
 
 type DiffieHellman struct {
@@ -44,7 +45,7 @@ func (dh *DiffieHellman) GenerateParameters() ([]byte, error) {
 	return dh.public, err
 }
 
-func (dh *DiffieHellman) HandleNegociation(publicKey []byte) ([]byte, error) {
+func (dh *DiffieHellman) HandleNegotiation(publicKey []byte) ([]byte, error) {
 	pK := dhkx.NewPublicKey(publicKey)
 	if dh.IsMisconfigured() {
 		return nil, xerrors.Errorf("Diffie Hellman misconfigured, can't negociate the keys")
@@ -63,6 +64,11 @@ func (dh *DiffieHellman) HandleNegociation(publicKey []byte) ([]byte, error) {
 	return dh.public, nil
 }
 
+func (dh *DiffieHellman) HandleAndVerifyNegotiation(publicKey []byte, preMasterSecret []byte) bool {
+	computedPk, err := dh.HandleNegotiation(publicKey)
+	return reflect.DeepEqual(computedPk, preMasterSecret) && err == nil
+}
+
 func (dh *DiffieHellman) GetMasterSecret() []byte {
 	hash := sha256.Sum256(dh.key.Bytes())
 	return hash[:]
@@ -73,8 +79,8 @@ func (dh *DiffieHellman) GetMasterSecret() []byte {
 // 	pka, _ := dha.GenerateParameters()
 //
 // 	dhb := DiffieHellman{}
-// 	pkb, _ := dhb.HandleNegociation(pka)
-// 	dha.HandleNegociation(pkb)
+// 	pkb, _ := dhb.HandleNegotiation(pka)
+// 	dha.HandleNegotiation(pkb)
 //
 // 	plaintext := []byte("Hello big boiiiii")
 // 	ciphertext, _ := Encrypt(dha.GetMasterSecret(), plaintext)

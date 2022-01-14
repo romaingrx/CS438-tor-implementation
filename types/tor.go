@@ -154,3 +154,25 @@ func (c OnionLayerMessage) String() string {
 func (c OnionLayerMessage) HTML() string {
 	return c.String()
 }
+
+// KeyExchangeAbandonMessage
+
+// NewEmpty implements types.Message.
+func (c KeyExchangeAbandonMessage) NewEmpty() Message {
+	return &KeyExchangeAbandonMessage{}
+}
+
+// Name implements types.Message.
+func (KeyExchangeAbandonMessage) Name() string {
+	return "keyexchangeabandon"
+}
+
+// String implements types.Message.
+func (c KeyExchangeAbandonMessage) String() string {
+	return c.Name()
+}
+
+// HTML implements types.Message.
+func (c KeyExchangeAbandonMessage) HTML() string {
+	return c.String()
+}

@@ -89,6 +89,7 @@ type node struct {
 
 	// Crypto parameters
 	privateKey *rsa.PrivateKey
+	keyExchangeChan ConcurrentMapChanMessage
 
 	// Circuit
 	directory NodesInfo

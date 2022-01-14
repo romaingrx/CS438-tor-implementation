@@ -241,10 +241,10 @@ type Circuits struct {
 	circuits map[string]Circuit
 }
 
-func (c *Circuits) Get(uid string) Circuit {
+func (c *Circuits) Get(circuitId string) Circuit {
 	c.Lock()
 	defer c.Unlock()
-	return c.circuits[uid]
+	return c.circuits[circuitId]
 }
 
 func (c *Circuits) GetAll() map[string]Circuit {
@@ -262,18 +262,66 @@ func (c *Circuits) GetProxyCircuits() map[string]Circuit {
 	return c.Filter(func(circuit Circuit) bool { return circuit.AmIProxy() })
 }
 
-func (c *Circuits) Put(uid string, circuit Circuit) {
+func (c *Circuits) Put(circuitId string, circuit Circuit) {
 	c.Lock()
 	defer c.Unlock()
-	c.circuits[uid] = circuit
+	c.circuits[circuitId] = circuit
+}
+
+func (c *Circuits) Delete(circuitId string) {
+	c.Lock()
+	defer c.Unlock()
+	delete(c.circuits, circuitId)
 }
 
 func (c *Circuits) Filter(filter func(c Circuit) bool) map[string]Circuit {
 	var filtered map[string]Circuit
-	for uid, circuit := range c.GetAll() {
+	for circuitId, circuit := range c.GetAll() {
 		if filter(circuit) {
-			filtered[uid] = circuit
+			filtered[circuitId] = circuit
 		}
 	}
 	return filtered
+}
+
+// ConcurrentMapChan
+
+// ConcurrentMapChanMessage is a threadsafe map
+type ConcurrentMapChanMessage struct {
+	sync.Mutex
+	opened map[string]bool
+	items  map[string]chan types.Message
+}
+
+// CreateIfNotExists declare a new entry if it doesn't exist yet
+func (m *ConcurrentMapChanMessage) CreateIfNotExists(key string) {
+	m.Lock()
+	if !m.opened[key] {
+		m.items[key] = make(chan types.Message)
+		m.opened[key] = true
+	}
+	m.Unlock()
+}
+
+// Set is the threadsafe set function
+func (m *ConcurrentMapChanMessage) Set(key string, value chan types.Message) {
+	m.Lock()
+	m.items[key] = value
+	m.Unlock()
+}
+
+// Get is the threadsafe get function
+func (m *ConcurrentMapChanMessage) Get(key string) *chan types.Message {
+	m.Lock()
+	item := m.items[key]
+	m.Unlock()
+	return &item
+}
+
+// Contains is the threadsafe contains function
+func (m *ConcurrentMapChanMessage) Contains(key string) bool {
+	m.Lock()
+	ok := m.opened[key]
+	m.Unlock()
+	return ok
 }

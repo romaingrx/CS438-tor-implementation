@@ -25,17 +25,34 @@ type RelayDataResponseMessage struct {
 	Data      []byte
 }
 
+type OnionLayerDirection bool
+
+const (
+	OnionLayerForward  OnionLayerDirection = false
+	OnionLayerBackward OnionLayerDirection = true
+)
+
 type OnionLayerMessage struct {
 	CircuitId string
+	Direction OnionLayerDirection
+	To        string
 	Type      string
 	Payload   []byte
 }
 
+type KeyExchangeAbandonMessage struct {
+	CircuitId string
+	Extra     string
+}
+
 type KeyExchangeRequestMessage struct {
+	CircuitId  string
 	Parameters []byte
 }
 
 type KeyExchangeResponseMessage struct {
+	CircuitId       string
+	Parameters      []byte
 	PreMasterSecret []byte
 	Signature       []byte
 }
