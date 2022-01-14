@@ -471,3 +471,53 @@ func (n *node) execTLCMessage(msg types.Message, pkt transport.Packet) error {
 
 	return n.NotifyReceivedTLC(*tlcMsg, pkt)
 }
+
+func (n *node) HandleNodeInfoMessage(msg types.Message, pkt transport.Packet) error {
+	keyExchangeRequestMsg, ok := msg.(*types.NodeInfoMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	// TODO tor implement
+	panic("implement me")
+}
+
+func (n *node) HandleKeyExchangeRequestMessage(msg types.Message, pkt transport.Packet) error {
+	keyExchangeRequestMsg, ok := msg.(*types.KeyExchangeRequestMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	// TODO tor implement
+	panic("implement me")
+}
+
+func (n *node) HandleKeyExchangeResponseMessage(msg types.Message, pkt transport.Packet) error {
+	keyExchangeResponseMsg, ok := msg.(*types.KeyExchangeResponseMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	// TODO tor implement
+	panic("implement me")
+}
+
+func (n *node) HandleKeyExchangeAbandonMessage(msg types.Message, pkt transport.Packet) error {
+	keyExchangeAbandonMsg, ok := msg.(*types.KeyExchangeAbandonMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	// TODO tor implement
+	panic("implement me")
+}
+
+func (n *node) HandleOnionLayerMessage(msg types.Message, pkt transport.Packet) error {
+	onionLayerMsg, ok := msg.(*types.OnionLayerMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	// TODO tor implement
+	panic("implement me")
+}

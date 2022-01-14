@@ -1,6 +1,8 @@
 package impl
 
 import (
+	"crypto/rsa"
+	"golang.org/x/xerrors"
 	"math/rand"
 	"sync"
 	"time"
@@ -170,7 +172,7 @@ func (m *ConcurrentCatalog) GetRandomPeerExcepted(excepted []string) string {
 
 type NodeInfo struct {
 	IP string
-	Pk []byte
+	Pk *rsa.PublicKey
 }
 
 type NodesInfo struct {
@@ -180,6 +182,26 @@ type NodesInfo struct {
 func (m *NodesInfo) Add(ip string, value NodeInfo) bool {
 	_, loaded := m.LoadOrStore(ip, value)
 	return !loaded
+}
+
+func (m *NodesInfo) GetNodeInfo(ip string) (*NodeInfo, error) {
+	nodeInfo, ok := m.Load(ip)
+	if !ok {
+		return nil, xerrors.Errorf("Can not find the node %s in the directory", ip)
+	}
+	return nodeInfo.(*NodeInfo), nil
+}
+
+func (m *NodesInfo) GetPublicKey(ip string) (*rsa.PublicKey, error) {
+	nodeInfo, err := m.GetNodeInfo(ip)
+	if err != nil {
+		return nil, err
+	}
+	return nodeInfo.Pk, nil
+}
+
+func (m *NodesInfo) GetRandom(nb int) ([]string, error) {
+	panic("implement me")
 }
 
 type RelayHttpRequest struct {
@@ -196,11 +218,12 @@ type RelayHttpRequest struct {
 // Relay Circuit is used in nodes that are used as relay nodes
 // Note that in the implementation a node can be both proxy and relay
 type RelayCircuit struct {
-	id            string        //Circuit ID: c1,c2,etc.
-	firstNode     NodeInfo      //Refers to the initiating node for this circuit
-	secondNode    NodeInfo      //Refers to the node on the other end of the circuit
-	beforeCircuit *RelayCircuit //Refers to prev circuit in case of middle relay, ex. c1 if this is c2 and we're in non proxy node
+	id            string        // Circuit ID: c1,c2,etc.
+	firstNode     NodeInfo      // Refers to the initiating node for this circuit
+	secondNode    NodeInfo      // Refers to the node on the other end of the circuit
+	beforeCircuit *RelayCircuit // Refers to prev circuit in case of middle relay, ex. c1 if this is c2 and we're in non proxy node
 	nextCircuit   *RelayCircuit // Refers to next circuit in case of non exit and non proxy node
+	masterSecret  []byte        // Contains the master secret shared during the key exchange
 }
 
 // Refers to the circuit information retained by a proxy node which contains information about c1 which connects to first relay node
@@ -218,70 +241,27 @@ type ProxyCircuit struct {
 	cttAverage          time.Duration   //Average Congestion time, should initialize to MAX_INT!!
 }
 
-type Circuit struct {
-	nodes     []string
-	sharedKey map[string][]byte
-}
-
-func (c *Circuit) AmIProxy() bool {
-	return len(c.nodes) > 2
-}
-
-func (c *Circuit) AmIExit() bool {
-	return len(c.nodes) == 1
-}
-
-func (c *Circuit) Extend(node string, key []byte) {
-	c.nodes = append(c.nodes, node)
-	c.sharedKey[node] = key
-}
-
-type Circuits struct {
-	sync.Mutex
-	circuits map[string]Circuit
-}
-
-func (c *Circuits) Get(circuitId string) Circuit {
-	c.Lock()
-	defer c.Unlock()
-	return c.circuits[circuitId]
-}
-
-func (c *Circuits) GetAll() map[string]Circuit {
-	c.Lock()
-	defer c.Unlock()
-	var cpy map[string]Circuit
-	for uid, circuit := range c.circuits {
-		cpy[uid] = circuit
+func NewProxyCircuit(id string) *ProxyCircuit {
+	// TODO tor ahmad: initialize all attributes with the good value
+	return &ProxyCircuit{
+		RelayCircuit: RelayCircuit{
+			id:            id,
+			firstNode:     NodeInfo{},
+			secondNode:    NodeInfo{},
+			beforeCircuit: nil,
+			nextCircuit:   nil,
+			masterSecret:  nil,
+		},
+		associatedMessage:   nil,
+		created:             time.Time{},
+		lastUsed:            time.Time{},
+		lastMetricMessage:   "",
+		lastMetricTimestamp: time.Time{},
+		currentRtt:          0,
+		rttMin:              nil,
+		ctt:                 nil,
+		cttAverage:          0,
 	}
-	return cpy
-}
-
-// GetProxyCircuits returns all the circuits that begins with this node
-func (c *Circuits) GetProxyCircuits() map[string]Circuit {
-	return c.Filter(func(circuit Circuit) bool { return circuit.AmIProxy() })
-}
-
-func (c *Circuits) Put(circuitId string, circuit Circuit) {
-	c.Lock()
-	defer c.Unlock()
-	c.circuits[circuitId] = circuit
-}
-
-func (c *Circuits) Delete(circuitId string) {
-	c.Lock()
-	defer c.Unlock()
-	delete(c.circuits, circuitId)
-}
-
-func (c *Circuits) Filter(filter func(c Circuit) bool) map[string]Circuit {
-	var filtered map[string]Circuit
-	for circuitId, circuit := range c.GetAll() {
-		if filter(circuit) {
-			filtered[circuitId] = circuit
-		}
-	}
-	return filtered
 }
 
 // ConcurrentMapChan

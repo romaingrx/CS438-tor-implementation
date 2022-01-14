@@ -88,12 +88,11 @@ type node struct {
 	paxos        Paxos
 
 	// Crypto parameters
-	privateKey *rsa.PrivateKey
+	privateKey      *rsa.PrivateKey
 	keyExchangeChan ConcurrentMapChanMessage
 
 	// Circuit
 	directory NodesInfo
-	circuits  Circuits
 
 	proxyCircuits []*ProxyCircuit
 	relayCircuits []*RelayCircuit
