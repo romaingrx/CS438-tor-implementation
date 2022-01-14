@@ -1,8 +1,10 @@
 package impl
 
 import (
+	"crypto/rsa"
 	"errors"
 	"fmt"
+	"go.dedis.ch/cs438/crypto"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -38,6 +40,9 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		searchReply: sync.Map{},
 	}
 	n.paxos = *n.NewPaxos(conf.PaxosID, conf.TotalPeers)
+	var err error
+	n.privateKey, err = crypto.GenerateKey(2048)
+	n.log.Fatalf("Error generating rsa parameters : %v", err)
 
 	// Register all callbacks for message types
 	n.conf.MessageRegistry.RegisterMessageCallback(types.ChatMessage{}, n.execChatMessage)
@@ -81,6 +86,9 @@ type node struct {
 	isStopped    bool // TODO: turn this in something more beautiful (use wg value or stop channel)
 	log          *log.Logger
 	paxos        Paxos
+
+	// Crypto parameters
+	privateKey *rsa.PrivateKey
 
 	// Circuit
 	directory NodesInfo

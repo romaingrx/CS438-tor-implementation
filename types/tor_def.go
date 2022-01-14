@@ -24,3 +24,18 @@ type RelayDataResponseMessage struct {
 	UID       string
 	Data      []byte
 }
+
+type OnionLayerMessage struct {
+	CircuitId string
+	Type      string
+	Payload   []byte
+}
+
+type KeyExchangeRequestMessage struct {
+	Parameters []byte
+}
+
+type KeyExchangeResponseMessage struct {
+	PreMasterSecret []byte
+	Signature       []byte
+}

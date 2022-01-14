@@ -3,6 +3,7 @@ module go.dedis.ch/cs438
 go 1.16
 
 require (
+	github.com/monnand/dhkx v0.0.0-20180522003156-9e5b033f1ac4
 	github.com/rs/xid v1.2.1
 	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.7.0

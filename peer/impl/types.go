@@ -231,6 +231,11 @@ func (c *Circuit) AmIExit() bool {
 	return len(c.nodes) == 1
 }
 
+func (c *Circuit) Extend(node string, key []byte) {
+	c.nodes = append(c.nodes, node)
+	c.sharedKey[node] = key
+}
+
 type Circuits struct {
 	sync.Mutex
 	circuits map[string]Circuit

@@ -89,3 +89,68 @@ func (c RelayDataResponseMessage) String() string {
 func (c RelayDataResponseMessage) HTML() string {
 	return c.String()
 }
+
+// KeyExchangeRequestMessage
+
+// NewEmpty implements types.Message.
+func (c KeyExchangeRequestMessage) NewEmpty() Message {
+	return &KeyExchangeRequestMessage{}
+}
+
+// Name implements types.Message.
+func (KeyExchangeRequestMessage) Name() string {
+	return "keyexchangerequest"
+}
+
+// String implements types.Message.
+func (c KeyExchangeRequestMessage) String() string {
+	return c.Name()
+}
+
+// HTML implements types.Message.
+func (c KeyExchangeRequestMessage) HTML() string {
+	return c.String()
+}
+
+// KeyExchangeResponseMessage
+
+// NewEmpty implements types.Message.
+func (c KeyExchangeResponseMessage) NewEmpty() Message {
+	return &KeyExchangeResponseMessage{}
+}
+
+// Name implements types.Message.
+func (KeyExchangeResponseMessage) Name() string {
+	return "keyexchangeresponse"
+}
+
+// String implements types.Message.
+func (c KeyExchangeResponseMessage) String() string {
+	return c.Name()
+}
+
+// HTML implements types.Message.
+func (c KeyExchangeResponseMessage) HTML() string {
+	return c.String()
+}
+// RelayMetricRequestMessage
+
+// NewEmpty implements types.Message.
+func (c OnionLayerMessage) NewEmpty() Message {
+	return &OnionLayerMessage{}
+}
+
+// Name implements types.Message.
+func (OnionLayerMessage) Name() string {
+	return "onionlayer"
+}
+
+// String implements types.Message.
+func (c OnionLayerMessage) String() string {
+	return fmt.Sprintf("<%s:%s>", c.CircuitId, c.Type)
+}
+
+// HTML implements types.Message.
+func (c OnionLayerMessage) HTML() string {
+	return c.String()
+}
