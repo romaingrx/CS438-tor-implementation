@@ -212,9 +212,10 @@ type ProxyCircuit struct {
 	lastUsed            time.Time
 	lastMetricMessage   string          //Refers to message id of the last metric message
 	lastMetricTimestamp time.Time       //Refers to the time the metric message was sent
-	currentRtt          time.Duration   //Last Round trip recorded for this circuit
-	rttMin              time.Duration   //Mininmum RTT recorded for this circuit
+	currentRtt          time.Duration   //Last Round trip recorded for this circuit, should be initialized to MAX_INT!!
+	rttMin              *time.Duration  //Mininmum RTT recorded for this circuit
 	ctt                 []time.Duration //last 5 Congestion time recordings; Ctt = Rtt - Rtt_Min
+	cttAverage          time.Duration   //Average Congestion time, should initialize to MAX_INT!!
 }
 
 type Circuit struct {

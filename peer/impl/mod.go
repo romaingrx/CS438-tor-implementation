@@ -83,8 +83,16 @@ type node struct {
 	paxos        Paxos
 
 	// Circuit
-	directory 	NodesInfo
-	circuits 	Circuits
+	directory NodesInfo
+	circuits  Circuits
+
+	proxyCircuits []*ProxyCircuit
+	relayCircuits []*RelayCircuit
+
+	proxiesLock sync.RWMutex
+	relaysLock  sync.RWMutex
+
+	circuitSelectionQuit chan struct{}
 }
 
 func (n *node) Addr() string {

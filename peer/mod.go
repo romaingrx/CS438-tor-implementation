@@ -1,10 +1,11 @@
 package peer
 
 import (
+	"time"
+
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
-	"time"
 )
 
 // Peer defines the interface of a peer in the Peerster system. It embeds all
@@ -79,6 +80,10 @@ type Configuration struct {
 	// retries to send a prepare when it doesn't get enough promises or accepts.
 	// Default: 5s.
 	PaxosProposerRetry time.Duration
+
+	MetricMessageRetry    time.Duration
+	MetricMessageInterval time.Duration
+	CircuitSelectAlgo     CircuitSelectAlgorithm
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must
@@ -92,3 +97,12 @@ type Backoff struct {
 	Factor  uint
 	Retry   uint
 }
+
+type CircuitSelectAlgorithm int64
+
+const (
+	RTT CircuitSelectAlgorithm = iota
+	CTT
+	CT_RTT
+	RTT_CT
+)
