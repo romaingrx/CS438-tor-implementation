@@ -4,12 +4,13 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"go.dedis.ch/cs438/crypto"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"sync"
 	"time"
+
+	"go.dedis.ch/cs438/crypto"
 
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
@@ -96,9 +97,11 @@ type node struct {
 
 	proxyCircuits []*ProxyCircuit
 	relayCircuits []*RelayCircuit
+	messages      map[string]*RelayHttpRequest
 
-	proxiesLock sync.RWMutex
-	relaysLock  sync.RWMutex
+	proxiesLock         sync.RWMutex
+	relaysLock          sync.RWMutex
+	torDataMessagesLock sync.RWMutex
 
 	circuitSelectionQuit chan struct{}
 }

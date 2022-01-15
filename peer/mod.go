@@ -83,6 +83,8 @@ type Configuration struct {
 
 	MetricMessageRetry    time.Duration
 	MetricMessageInterval time.Duration
+	DataMessageRetry      time.Duration
+	DataMessageTimeout    time.Duration
 	CircuitSelectAlgo     CircuitSelectAlgorithm
 }
 

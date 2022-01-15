@@ -2,10 +2,12 @@ package impl
 
 import (
 	"crypto/rsa"
-	"golang.org/x/xerrors"
+	"math"
 	"math/rand"
 	"sync"
 	"time"
+
+	"golang.org/x/xerrors"
 
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
@@ -205,11 +207,17 @@ func (m *NodesInfo) GetRandom(nb int) ([]string, error) {
 }
 
 type RelayHttpRequest struct {
-	uid             string
-	destinationIp   string
-	destinationPort string
-	requestType     string
-	data            []byte
+	UID               string
+	DestinationIp     string
+	DestinationPort   string
+	RequestType       string
+	Data              []byte
+	ResponseData      []byte
+	ResponseReceived  bool
+	Active            bool
+	SentTimeStamp     time.Time
+	ReceivedTimeStamp time.Time
+	Notify            chan struct{}
 }
 
 // Proxy node refers to the first node trying to initiate the circuit
@@ -242,7 +250,7 @@ type ProxyCircuit struct {
 }
 
 func NewProxyCircuit(id string) *ProxyCircuit {
-	// TODO tor ahmad: initialize all attributes with the good value
+	// TODO tor ahmad: initialize all attributes with the good value : DONE -ahmad
 	return &ProxyCircuit{
 		RelayCircuit: RelayCircuit{
 			id:            id,
@@ -253,14 +261,14 @@ func NewProxyCircuit(id string) *ProxyCircuit {
 			masterSecret:  nil,
 		},
 		associatedMessage:   nil,
-		created:             time.Time{},
-		lastUsed:            time.Time{},
+		created:             time.Now(),
+		lastUsed:            time.Now(),
 		lastMetricMessage:   "",
 		lastMetricTimestamp: time.Time{},
-		currentRtt:          0,
+		currentRtt:          math.MaxInt64,
 		rttMin:              nil,
 		ctt:                 nil,
-		cttAverage:          0,
+		cttAverage:          math.MaxInt64,
 	}
 }
 

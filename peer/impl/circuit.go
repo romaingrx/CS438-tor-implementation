@@ -2,11 +2,13 @@ package impl
 
 import (
 	"crypto/rsa"
+	"errors"
 	"fmt"
-	"go.dedis.ch/cs438/crypto"
 	"sort"
 	"strings"
 	"time"
+
+	"go.dedis.ch/cs438/crypto"
 
 	"github.com/rs/xid"
 	"go.dedis.ch/cs438/peer"
@@ -322,7 +324,7 @@ func (n *node) ExecRelayMetricRequestMessage(msg types.Message, pkt transport.Pa
 
 func (n *node) ExecRelayMetricResponseMessage(msg types.Message, pkt transport.Packet) error {
 
-	metricResponseMsg, ok := msg.(*types.RelayDataResponseMessage)
+	metricResponseMsg, ok := msg.(*types.RelayMetricResponseMessage)
 	if !ok {
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
@@ -361,7 +363,7 @@ func (n *node) ExecRelayMetricResponseMessage(msg types.Message, pkt transport.P
 	return nil
 }
 
-func (n *node) RTT_Received(metricsResponseMessage *types.RelayDataResponseMessage) {
+func (n *node) RTT_Received(metricsResponseMessage *types.RelayMetricResponseMessage) {
 
 	proxyCircuit := n.getProxyCircuit(metricsResponseMessage.CircuitId)
 
@@ -537,18 +539,208 @@ func (n *node) SelectCircuit(request *RelayHttpRequest) *ProxyCircuit {
 
 func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Packet) error {
 
+	// Message received could be received either at relay node or exit node
+	// In case of relay node, for example circuit id will be c1,
+	// this node has to find c2, update circuit id for the message with this id
+	// then forward the message to c2's second node since first node is already the relay node
+	// In case of exit node, for example c2, node connects to http server, wait for response and then sends back the result
+	// Exit node then uses c2's first node to return message with same circuit id and uid for message
+
+	dataRequestMsg, ok := msg.(*types.RelayDataRequestMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	relayCircuit := n.getRelayCircuit(dataRequestMsg.CircuitId)
+
+	if relayCircuit == nil {
+		return xerrors.Errorf("Cannot find circuit %s requested for metrics\n", dataRequestMsg.CircuitId)
+	}
+
+	if relayCircuit.nextCircuit != nil {
+		// If this is a relay node then forward message
+
+		// Update Circuit Id to be the next circuit id
+		dataRequestMsg.CircuitId = relayCircuit.nextCircuit.id
+		RequestMsg, err := n.conf.MessageRegistry.MarshalMessage(dataRequestMsg)
+		if err != nil {
+			return xerrors.Errorf("Error marshaling metric Request for circuit id %s\n", dataRequestMsg.CircuitId)
+		}
+
+		err = n.UnicastDirect(n.conf.Socket.GetAddress(), relayCircuit.nextCircuit.secondNode.IP, RequestMsg)
+		if err != nil {
+			return xerrors.Errorf("Error forwarding metric request for circuit id %s\n", dataRequestMsg.CircuitId)
+		}
+
+		return nil
+	}
+
+	// If this is exit node, then send message to http server
+	// After receiving the result, send back response
+
+	// TODO tor: send http request and attach paylod here
+	dataResponse := types.RelayDataResponseMessage{
+		CircuitId: dataRequestMsg.CircuitId,
+		UID:       dataRequestMsg.UID,
+		Data:      nil, // TODO tor: replace nil with actual data
+	}
+
+	dataResponseMsg, err := n.conf.MessageRegistry.MarshalMessage(dataResponse)
+	if err != nil {
+		return xerrors.Errorf("Error marshaling metric response for circuit id %s\n", dataResponse.CircuitId)
+	}
+
+	err = n.UnicastDirect(n.conf.Socket.GetAddress(), relayCircuit.firstNode.IP, dataResponseMsg)
+	if err != nil {
+		return xerrors.Errorf("Error sending metric request for circuit id %s\n", dataResponse.CircuitId)
+	}
+
 	return nil
+
 }
 
 func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Packet) error {
 
+	dataResponseMsg, ok := msg.(*types.RelayDataResponseMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	relayCircuit := n.getRelayCircuit(dataResponseMsg.CircuitId)
+	var proxyCircuit *ProxyCircuit
+	if relayCircuit == nil {
+		proxyCircuit = n.getProxyCircuit(dataResponseMsg.CircuitId)
+	}
+
+	if relayCircuit == nil && proxyCircuit == nil {
+		return xerrors.Errorf("Cannot find circuit %s for metrics response\n", dataResponseMsg.CircuitId)
+	}
+
+	if relayCircuit != nil {
+		// Message received by a relay node
+		// Forward it to previous circuit
+
+		// Update Circuit Id to be the next circuit id
+		dataResponseMsg.CircuitId = relayCircuit.beforeCircuit.id
+		metricsResponseMsg, err := n.conf.MessageRegistry.MarshalMessage(dataResponseMsg)
+		if err != nil {
+			return xerrors.Errorf("Error marshaling metric Request for circuit id %s\n", dataResponseMsg.CircuitId)
+		}
+
+		err = n.UnicastDirect(n.conf.Socket.GetAddress(), relayCircuit.beforeCircuit.firstNode.IP, metricsResponseMsg)
+		if err != nil {
+			return xerrors.Errorf("Error forwarding metric request for circuit id %s\n", dataResponseMsg.CircuitId)
+		}
+
+		return nil
+	}
+
+	// If this is the original proxy node then just call RTT received marking the round trip complete
+	n.DataReceived(dataResponseMsg)
 	return nil
 }
 
-func (n *node) DataReceived() {
+func (n *node) DataReceived(dataResponse *types.RelayDataResponseMessage) {
+
+	n.log.Printf("Response Received for request with id %s : %s", dataResponse.UID, string(dataResponse.Data))
+	//TODO tor: notify sender that response has been received
+	n.torDataMessagesLock.Lock()
+	msg := n.messages[dataResponse.UID]
+	if !msg.Active {
+		n.log.Printf("Message Request already timed out")
+		return
+	}
+
+	msg.ResponseData = dataResponse.Data
+	msg.ResponseReceived = true
+	msg.ReceivedTimeStamp = time.Now()
+	n.torDataMessagesLock.Unlock()
+
+	msg.Notify <- struct{}{}
+
 }
 
-func (n *node) SendMessage() {
+func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []byte) (*RelayHttpRequest, error) {
+	dataReq := &RelayHttpRequest{
+		UID:               xid.New().String(),
+		DestinationIp:     destinationIp,
+		DestinationPort:   port,
+		RequestType:       httpRequestType,
+		Data:              data,
+		Active:            true,
+		ResponseData:      nil,
+		ResponseReceived:  false,
+		SentTimeStamp:     time.Now(),
+		ReceivedTimeStamp: time.Time{},
+		Notify:            make(chan struct{}),
+	}
+
+	// Save message request in node
+	n.torDataMessagesLock.Lock()
+	n.messages[dataReq.UID] = dataReq
+	n.torDataMessagesLock.Unlock()
+
+	//Select circuit
+	c := n.SelectCircuit(dataReq)
+
+	if c == nil {
+		return nil, errors.New("no circuit selected for this message.")
+	}
+
+	dataRelayReq := &types.RelayDataRequestMessage{
+		CircuitId:       c.id,
+		UID:             dataReq.UID,
+		DestinationIp:   dataReq.DestinationIp,
+		DestinationPort: dataReq.DestinationPort,
+		RequestType:     dataReq.RequestType,
+		Data:            dataReq.Data,
+	}
+
+	dataReqMsg, err := n.conf.MessageRegistry.MarshalMessage(dataRelayReq)
+	if err != nil {
+		return nil, errors.New("Error marshaling metric request for circuit id " + dataRelayReq.CircuitId)
+	}
+
+	err = n.UnicastDirect(n.conf.Socket.GetAddress(), c.secondNode.IP, dataReqMsg)
+	if err != nil {
+		return nil, errors.New("Error sending metric request for circuit id " + dataRelayReq.CircuitId)
+	}
+
+	// Every X minutes, each circuit gets sent a message that
+	// aids in calculating the RTT
+	currentRetryDuration := n.conf.DataMessageRetry
+
+	for {
+		ticker := time.NewTicker(currentRetryDuration)
+
+		select {
+		case <-ticker.C:
+			currentRetryDuration *= 2
+		case <-dataReq.Notify:
+			ticker.Stop()
+		}
+
+		n.torDataMessagesLock.Lock()
+		received := dataReq.ResponseReceived
+		n.torDataMessagesLock.Unlock()
+
+		if received {
+			return dataReq, nil
+		}
+
+		if currentRetryDuration > n.conf.DataMessageTimeout {
+			n.torDataMessagesLock.Lock()
+			dataReq.Active = false
+			n.torDataMessagesLock.Unlock()
+
+			// TODO tor: destroy circuit
+			// TODO tor: try different circuit if possible
+			return nil, errors.New("message response waiting timeout")
+		}
+
+	}
+
+	return nil, nil
 }
 
 // End Messages/Data Relay
