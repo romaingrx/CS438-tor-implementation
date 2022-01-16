@@ -1,6 +1,8 @@
 package impl
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/rs/xid"
 	"go.dedis.ch/cs438/crypto"
 	"go.dedis.ch/cs438/transport"
@@ -480,6 +482,7 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
+	fmt.Println("Exec the key request")
 	// Three possibilities:
 	// 1. The relay circuit is not known, then we need to create a relay circuit and reply to the key exchange
 	// 2. The relay circuit is known but does not contain a secondCircuit, then we extend it and forward the request
@@ -500,13 +503,8 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 			secondNode:    n.directory.GetNodeInfo(n.conf.Socket.GetAddress()),
 			beforeCircuit: nil,
 			nextCircuit:   nil,
-			masterSecret:  KeyExchangeAlgo.GetMasterSecret(),
+			masterSecret:  nil,
 		}
-		err = n.addRelayCircuit(&newRelayCircuit)
-		if err != nil {
-			return err
-		}
-
 		// Send back a key exchange response
 		keyExchangeResponseMsg := types.KeyExchangeResponseMessage{
 			CircuitId:  keyExchangeRequestMsg.CircuitId,
@@ -517,7 +515,12 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 			return err
 		}
 
-		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(keyExchangeResponseMsg)
+		msg, err := PackRelayExitOnionLayer(keyExchangeResponseMsg, newRelayCircuit)
+		if err != nil {
+			return err
+		}
+
+		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(msg)
 		if err != nil {
 			return err
 		}
@@ -526,6 +529,12 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 		if err != nil {
 			return err
 		}
+		newRelayCircuit.masterSecret = KeyExchangeAlgo.GetMasterSecret()
+		err = n.addRelayCircuit(&newRelayCircuit)
+		if err != nil {
+			return err
+		}
+
 
 	} else if relayCircuit.nextCircuit == nil && keyExchangeRequestMsg.Extend != n.conf.Socket.GetAddress() {
 		// Add the new relay circuit with the next node
@@ -617,15 +626,40 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 	var err error
 
 	if proxyCircuit := n.getProxyCircuit(onion.CircuitId); proxyCircuit != nil {
-		transportMsg := transport.Message{
-			Type:    onion.Type,
-			Payload: onion.Payload,
+		fmt.Printf("Received an onion of type %s for proxy from %s for circuit id %s \n", onion.Type, pkt.Header.Source, onion.CircuitId)
+		onion.Payload, err = UnpeelProxyOnionLayers(*onion, *proxyCircuit)
+		if err != nil{
+			return err
 		}
 
-		pkt.Msg = &transportMsg
-		return n.conf.MessageRegistry.ProcessPacket(pkt)
+		if onion.Type == (types.KeyExchangeResponseMessage{}).Name() {
+			var keyExchangeResponseMsg types.KeyExchangeResponseMessage
+			err = json.Unmarshal(onion.Payload, &keyExchangeResponseMsg)
+			if err != nil{
+				return err
+			}
+			keyExchangeResponseMsg.CircuitId = onion.CircuitId
+			onion.Payload, err = json.Marshal(keyExchangeResponseMsg)
+			if err != nil{
+				return err
+			}
+		}
 
+		processedPkt := transport.Packet{
+			Header: pkt.Header,
+			Msg:    &transport.Message{
+				Type:    onion.Type,
+				Payload: onion.Payload,
+			},
+		}
+		err := n.conf.MessageRegistry.ProcessPacket(processedPkt)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	} else if relayCircuit := n.getRelayCircuit(onion.CircuitId); relayCircuit != nil {
+		fmt.Printf("Received an onion of type %s for relay from %s for circuit id %s \n", onion.Type, pkt.Header.Source, onion.CircuitId)
 		var nextIP string
 		if onion.Direction == types.OnionLayerForward {
 			onion.Payload, err = crypto.Decrypt(relayCircuit.masterSecret, onion.Payload)
@@ -634,13 +668,33 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 			}
 			// Then we need to extend this circuit
 			if relayCircuit.nextCircuit == nil {
-				transportMsg := transport.Message{
-					Type:    onion.Type,
-					Payload: onion.Payload,
+				var keyExchangeRequestMsg types.KeyExchangeRequestMessage
+				err := json.Unmarshal(onion.Payload, &keyExchangeRequestMsg)
+				if err != nil{
+					return err
+				}
+				fmt.Println("Extend the circuit ", onion.CircuitId, " to node ", keyExchangeRequestMsg.Extend)
+
+
+				newRelayCircuit := RelayCircuit{
+					id:            xid.New().String(),
+					firstNode:     relayCircuit.secondNode,
+					secondNode:    n.directory.GetNodeInfo(keyExchangeRequestMsg.Extend),
+					beforeCircuit: relayCircuit,
+					nextCircuit:   nil,
+					masterSecret:  nil,
+				}
+				relayCircuit.nextCircuit = &newRelayCircuit
+				err = n.addRelayCircuit(&newRelayCircuit)
+				if err != nil {
+					return err
 				}
 
-				pkt.Msg = &transportMsg
-				return n.conf.MessageRegistry.ProcessPacket(pkt)
+				keyExchangeRequestMsg.CircuitId = newRelayCircuit.id
+				onion.Payload, err = json.Marshal(keyExchangeRequestMsg)
+				if err != nil{
+					return err
+				}
 			}
 
 			nextCircuit := relayCircuit.nextCircuit
@@ -649,9 +703,9 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 			}
 			onion.CircuitId = nextCircuit.id
 			nextIP = nextCircuit.secondNode.IP
+			fmt.Println("Forward relay for circuit ", nextCircuit.id)
 
 		} else {
-			onion.Payload, err = crypto.Encrypt(relayCircuit.masterSecret, onion.Payload)
 			if err != nil {
 				return err
 			}
@@ -659,8 +713,10 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 			if beforeCircuit == nil {
 				return xerrors.Errorf("Try to relay a message backward with the circuitId %d that is in the relay circuits but can not find the circuit before", onion.CircuitId)
 			}
+			onion.Payload, err = crypto.Encrypt(beforeCircuit.masterSecret, onion.Payload)
 			onion.CircuitId = beforeCircuit.id
 			nextIP = beforeCircuit.firstNode.IP
+			fmt.Println("Backward relay for circuit ", beforeCircuit.id)
 		}
 
 		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(onion)
@@ -674,6 +730,7 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 		}
 
 	} else {
+		fmt.Println("Received an onion with create from ", pkt.Header.Source, " for circuit id ", onion.CircuitId)
 		if onion.Type == types.KeyExchangeRequestMessage.Name(types.KeyExchangeRequestMessage{}) {
 			transportMsg := transport.Message{
 				Type:    onion.Type,
