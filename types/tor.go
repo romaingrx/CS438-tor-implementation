@@ -90,28 +90,6 @@ func (c RelayDataResponseMessage) HTML() string {
 	return c.String()
 }
 
-// NodeInfoMessage
-
-// NewEmpty implements types.Message.
-func (c NodeInfoMessage) NewEmpty() Message {
-	return &NodeInfoMessage{}
-}
-
-// Name implements types.Message.
-func (NodeInfoMessage) Name() string {
-	return "nodeinfo"
-}
-
-// String implements types.Message.
-func (c NodeInfoMessage) String() string {
-	return fmt.Sprintf("nodeinfo<%s>", c.NodeInfo.IP)
-}
-
-// HTML implements types.Message.
-func (c NodeInfoMessage) HTML() string {
-	return c.String()
-}
-
 // KeyExchangeRequestMessage
 
 // NewEmpty implements types.Message.
@@ -175,27 +153,5 @@ func (c OnionLayerMessage) String() string {
 
 // HTML implements types.Message.
 func (c OnionLayerMessage) HTML() string {
-	return c.String()
-}
-
-// KeyExchangeAbandonMessage
-
-// NewEmpty implements types.Message.
-func (c KeyExchangeAbandonMessage) NewEmpty() Message {
-	return &KeyExchangeAbandonMessage{}
-}
-
-// Name implements types.Message.
-func (KeyExchangeAbandonMessage) Name() string {
-	return "keyexchangeabandon"
-}
-
-// String implements types.Message.
-func (c KeyExchangeAbandonMessage) String() string {
-	return c.Name()
-}
-
-// HTML implements types.Message.
-func (c KeyExchangeAbandonMessage) HTML() string {
 	return c.String()
 }

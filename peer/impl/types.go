@@ -2,12 +2,11 @@ package impl
 
 import (
 	"crypto/rsa"
+	"golang.org/x/xerrors"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
-
-	"golang.org/x/xerrors"
 
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
@@ -178,32 +177,51 @@ type NodeInfo struct {
 }
 
 type NodesInfo struct {
-	sync.Map
+	sync.Mutex
+	dic map[string]NodeInfo
 }
 
 func (m *NodesInfo) Add(ip string, value NodeInfo) bool {
-	_, loaded := m.LoadOrStore(ip, value)
-	return !loaded
+	m.Lock()
+	defer m.Unlock()
+	if _, ok := m.dic[ip]; ok {
+		return false
+	}
+	m.dic[ip] = value
+	return true
 }
 
-func (m *NodesInfo) GetNodeInfo(ip string) (*NodeInfo, error) {
-	nodeInfo, ok := m.Load(ip)
-	if !ok {
-		return nil, xerrors.Errorf("Can not find the node %s in the directory", ip)
-	}
-	return nodeInfo.(*NodeInfo), nil
+func (m *NodesInfo) GetNodeInfo(ip string) NodeInfo {
+	m.Lock()
+	defer m.Unlock()
+	return m.dic[ip]
 }
 
-func (m *NodesInfo) GetPublicKey(ip string) (*rsa.PublicKey, error) {
-	nodeInfo, err := m.GetNodeInfo(ip)
-	if err != nil {
-		return nil, err
-	}
-	return nodeInfo.Pk, nil
+func (m *NodesInfo) GetPublicKey(ip string) *rsa.PublicKey {
+	nodeInfo := m.GetNodeInfo(ip)
+	return nodeInfo.Pk
 }
 
 func (m *NodesInfo) GetRandom(nb int) ([]string, error) {
-	panic("implement me")
+	m.Lock()
+	defer m.Unlock()
+	if len(m.dic) < nb {
+		return nil, xerrors.Errorf("Not enough nodes (%d) in the dictionary to pick %d nodes", len(m.dic), nb)
+	}
+	var nodes []string
+	nodesIdx := rand.Perm(len(m.dic))[:nb]
+	var idx = 0
+	for _, nodeInfo := range m.dic {
+		if len(nodesIdx) == 0 {
+			break
+		}
+		if idx == nodesIdx[0] {
+			nodes = append(nodes, nodeInfo.IP)
+			nodesIdx = nodesIdx[1:]
+		}
+		idx++
+	}
+	return nodes, nil
 }
 
 type RelayHttpRequest struct {
@@ -247,15 +265,18 @@ type ProxyCircuit struct {
 	rttMin              *time.Duration  //Mininmum RTT recorded for this circuit
 	ctt                 []time.Duration //last 5 Congestion time recordings; Ctt = Rtt - Rtt_Min
 	cttAverage          time.Duration   //Average Congestion time, should initialize to MAX_INT!!
+	// TODO tor: maybe another struct than an array
+	AllMasterSecrets [][]byte // Contains the master secrets shared with all nodes during the key exchange
 }
 
-func NewProxyCircuit(id string) *ProxyCircuit {
-	// TODO tor ahmad: initialize all attributes with the good value : DONE -ahmad
+// TODO tor ahmad: initialize all attributes with the good value : DONE -ahmad
+func NewProxyCircuit(id string, firstNode, secondNode NodeInfo) *ProxyCircuit {
+	// TODO tor ahmad: initialize all attributes with the good value
 	return &ProxyCircuit{
 		RelayCircuit: RelayCircuit{
 			id:            id,
-			firstNode:     NodeInfo{},
-			secondNode:    NodeInfo{},
+			firstNode:     firstNode,
+			secondNode:    secondNode,
 			beforeCircuit: nil,
 			nextCircuit:   nil,
 			masterSecret:  nil,
@@ -269,6 +290,7 @@ func NewProxyCircuit(id string) *ProxyCircuit {
 		rttMin:              nil,
 		ctt:                 nil,
 		cttAverage:          math.MaxInt64,
+		AllMasterSecrets:    [][]byte{},
 	}
 }
 
@@ -301,7 +323,7 @@ func (m *ConcurrentMapChanMessage) Set(key string, value chan types.Message) {
 // Get is the threadsafe get function
 func (m *ConcurrentMapChanMessage) Get(key string) *chan types.Message {
 	m.Lock()
-	item := m.items[key]
+	item, _ := m.items[key]
 	m.Unlock()
 	return &item
 }
@@ -309,7 +331,7 @@ func (m *ConcurrentMapChanMessage) Get(key string) *chan types.Message {
 // Contains is the threadsafe contains function
 func (m *ConcurrentMapChanMessage) Contains(key string) bool {
 	m.Lock()
-	ok := m.opened[key]
+	ok, _ := m.opened[key]
 	m.Unlock()
 	return ok
 }

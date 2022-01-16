@@ -1,7 +1,5 @@
 package types
 
-import "go.dedis.ch/cs438/peer/impl"
-
 type RelayMetricRequestMessage struct {
 	CircuitId string
 	UID       string
@@ -34,32 +32,22 @@ const (
 	OnionLayerBackward OnionLayerDirection = true
 )
 
-type NodeInfoMessage struct {
-	NodeInfo  impl.NodeInfo
-	Signature []byte
-}
-
 type OnionLayerMessage struct {
 	CircuitId string
+	Cmd       string
 	Direction OnionLayerDirection
-	To        string
 	Type      string
 	Payload   []byte
-}
-
-type KeyExchangeAbandonMessage struct {
-	CircuitId string
-	Extra     string
 }
 
 type KeyExchangeRequestMessage struct {
 	CircuitId  string
 	Parameters []byte
+	Extend     string
 }
 
 type KeyExchangeResponseMessage struct {
-	CircuitId       string
-	Parameters      []byte
-	PreMasterSecret []byte
-	Signature       []byte
+	CircuitId  string
+	Parameters []byte
+	Signature  []byte
 }

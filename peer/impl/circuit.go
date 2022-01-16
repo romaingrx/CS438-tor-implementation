@@ -2,15 +2,15 @@ package impl
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"go.dedis.ch/cs438/crypto"
-
 	"github.com/rs/xid"
+	"go.dedis.ch/cs438/crypto"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
@@ -37,6 +37,7 @@ func (n *node) AddNodesToDirectory(nodesInfo map[string]NodeInfo) error {
 
 // CreateRandomCircuit will construct and exchange keys with random nodes
 func (n *node) CreateRandomCircuit() error {
+	// TODO tor: check that this all nodes are different
 	nodes, err := n.directory.GetRandom(3)
 	if err != nil {
 		return err
@@ -56,16 +57,13 @@ func (n *node) CreateCircuit(nodes []string) error {
 	//     <--- OnionLayerMessage(Encrypt(KeyExchangeResponseMessage(Sk2), Sk1)) <--- Encrypt(..., Sk1) <--- KeyExchangeResponseMessage(Sk2) ---
 	// ...
 
-	// TODO tor ahmad: translate these arrays to circuit struct
-	var circuitIds []string
-	var masterSecrets [][]byte
 	proxyCircuit := NewProxyCircuit(
 		xid.New().String(),
+		n.directory.GetNodeInfo(n.conf.Socket.GetAddress()),
+		n.directory.GetNodeInfo(nodes[0]),
 	)
 
 	for idx, nod := range nodes {
-		circuitId := xid.New().String()
-		circuitIds = append(circuitIds, circuitId)
 		// First generate a private, public key for this particular node
 		KeyExchangeAlgo := crypto.DiffieHellman{}
 		Pk, err := KeyExchangeAlgo.GenerateParameters()
@@ -74,48 +72,42 @@ func (n *node) CreateCircuit(nodes []string) error {
 		}
 
 		msg := types.KeyExchangeRequestMessage{
+			CircuitId:  proxyCircuit.id,
 			Parameters: Pk,
 		}
-		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(msg)
+
+		if idx > 0 {
+			msg.Extend = nod
+		}
+
+		onion, err := PackProxyOnionLayers(msg, *proxyCircuit)
 		if err != nil {
 			return err
 		}
 
-		// Send the KeyExhangeRequestMessage through the nodes preceding node n
-		if 0 < idx {
-			onion, err := n.PackOnionLayersUntil(msg, circuitIds[:idx], nodes[:idx], masterSecrets[:idx], nod)
-			if err != nil {
-				return err
-			}
-			transportMsg, err = n.conf.MessageRegistry.MarshalMessage(onion)
-			if err != nil {
-				return err
-			}
+		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(onion)
+		if err != nil {
+			return err
 		}
 
-		err = n.UnicastDirect(n.conf.Socket.GetAddress(), nod, transportMsg)
+		err = n.UnicastDirect(n.conf.Socket.GetAddress(), proxyCircuit.secondNode.IP, transportMsg)
 		if err != nil {
 			return err
 		}
 
 		select {
-		case msg := <-*n.keyExchangeChan.Get(circuitId):
+		case msg := <-*n.keyExchangeChan.Get(proxyCircuit.id):
 			if reply, ok := msg.(types.KeyExchangeResponseMessage); ok {
 				if !n.VerifyKeyExchangeResponse(nod, reply) {
 					return xerrors.Errorf("Failed to verify the signature of a key exchange response from node %s", nod)
 				}
-				if !KeyExchangeAlgo.HandleAndVerifyNegotiation(reply.Parameters, reply.PreMasterSecret) {
-					return xerrors.Errorf("Failed to verify the pre master secret response from node %s", nod)
-				}
+				KeyExchangeAlgo.HandleNegotiation(reply.Parameters)
 
 				// If every test passes, then add this node and the master secret in the circuit and continue
-				masterSecrets = append(masterSecrets, KeyExchangeAlgo.GetMasterSecret())
-			} else if reply, ok := msg.(types.KeyExchangeAbandonMessage); ok {
-				n.deleteProxyCircuit(circuitId)
-				return xerrors.Errorf("Abandon of the circuit %s : %s", reply.CircuitId, reply.Extra)
+				proxyCircuit.AllMasterSecrets = append(proxyCircuit.AllMasterSecrets, KeyExchangeAlgo.GetMasterSecret())
 			} else {
-				n.deleteProxyCircuit(circuitId)
-				return xerrors.Errorf("Wrong type message %s received on the keyExchange channel for circuitId %s", msg.Name, circuitId)
+				n.deleteProxyCircuit(proxyCircuit.id)
+				return xerrors.Errorf("Wrong type message %s received on the keyExchange channel for circuitId %s", msg.Name, proxyCircuit.id)
 			}
 			// TODO tor: add a timeout
 		}
@@ -126,40 +118,81 @@ func (n *node) CreateCircuit(nodes []string) error {
 	return nil
 }
 
-func (n *node) PackOnionLayersUntil(msg types.Message, circuitIds []string, nodes []string, masterSecrets [][]byte, to string) (*types.OnionLayerMessage, error) {
-	// TODO tor ahmad: change the signature of the function to accept a circuit
-	var onion types.OnionLayerMessage
-	for idx, _ := range nodes {
-		// We reached the last node and thus do not want to encrypt anything
-		reverseIdx := len(nodes) - idx - 1
-		circuitId := circuitIds[reverseIdx]
-		masterSecret := masterSecrets[reverseIdx]
-
-		encryptedMsg, err := crypto.EncryptMsg(masterSecret, msg)
-		if err != nil {
-			return &types.OnionLayerMessage{}, err
-		}
-
-		cto := to
-		if idx > 0 {
-			cto = nodes[len(nodes)-idx]
-		}
-
-		onion = types.OnionLayerMessage{
-			CircuitId: circuitId,
-			Direction: types.OnionLayerForward,
-			To:        cto,
-			Type:      msg.Name(),
-			Payload:   encryptedMsg,
-		}
-
-		msg = onion
+func PackProxyOnionLayers(msg types.Message, proxyCircuit ProxyCircuit) (*types.OnionLayerMessage, error) {
+	var err error
+	msgBytes, err := json.Marshal(msg)
+	onion := types.OnionLayerMessage{
+		CircuitId: proxyCircuit.id,
+		Direction: types.OnionLayerForward,
+		Type:      msg.Name(),
+		Payload:   msgBytes,
 	}
+
+	for reverseIdx := range proxyCircuit.AllMasterSecrets {
+		masterSecret := proxyCircuit.AllMasterSecrets[len(proxyCircuit.AllMasterSecrets)-reverseIdx-1]
+		onion.Payload, err = crypto.Encrypt(masterSecret, onion.Payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &onion, nil
 }
 
+func UnpeelProxyOnionLayers(onion types.OnionLayerMessage, proxyCircuit ProxyCircuit) ([]byte, error) {
+	var err error
+
+	for _, masterSecret := range proxyCircuit.AllMasterSecrets {
+		onion.Payload, err = crypto.Decrypt(masterSecret, onion.Payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return onion.Payload, nil
+}
+
+func PackRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCircuit) ([]byte, error) {
+	return crypto.Encrypt(relayCircuit.masterSecret, onion.Payload)
+}
+
+func UnpeelRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCircuit) ([]byte, error) {
+	return crypto.Decrypt(relayCircuit.masterSecret, onion.Payload)
+}
+
+// func (n *node) DEPERECATEDPackOnionLayersUntil(msg types.Message, circuitIds []string, nodes []string, masterSecrets [][]byte, to string) (*types.OnionLayerMessage, error) {
+// 	var onion types.OnionLayerMessage
+// 	for idx, _ := range nodes {
+// 		// We reached the last node and thus do not want to encrypt anything
+// 		reverseIdx := len(nodes) - idx - 1
+// 		circuitId := circuitIds[reverseIdx]
+// 		masterSecret := masterSecrets[reverseIdx]
+//
+// 		encryptedMsg, err := EncryptMsg(masterSecret, msg)
+// 		if err != nil {
+// 			return &types.OnionLayerMessage{}, err
+// 		}
+//
+// 		cto := to
+// 		if idx > 0 {
+// 			cto = nodes[len(nodes)-idx]
+// 		}
+//
+// 		onion = types.OnionLayerMessage{
+// 			CircuitId: circuitId,
+// 			Direction: types.OnionLayerForward,
+// 			To:        cto,
+// 			Type:      msg.Name(),
+// 			Payload:   encryptedMsg,
+// 		}
+//
+// 		msg = onion
+// 	}
+// 	return &onion, nil
+// }
+
 func GetBytesToSign(response types.KeyExchangeResponseMessage) []byte {
-	return append([]byte(response.CircuitId), append(response.Parameters, response.PreMasterSecret...)...)
+	return append([]byte(response.CircuitId), response.Parameters...)
 }
 
 func (n *node) SignKeyExchangeResponse(key *rsa.PrivateKey, response types.KeyExchangeResponseMessage) ([]byte, error) {
@@ -167,9 +200,8 @@ func (n *node) SignKeyExchangeResponse(key *rsa.PrivateKey, response types.KeyEx
 }
 
 func (n *node) VerifyKeyExchangeResponse(nod string, reply types.KeyExchangeResponseMessage) bool {
-	pk, err := n.directory.GetPublicKey(nod)
-	n.log.Printf("%v", err)
-	return err == nil && crypto.Verify(GetBytesToSign(reply), reply.Signature, pk)
+	pk := n.directory.GetPublicKey(nod)
+	return crypto.Verify(GetBytesToSign(reply), reply.Signature, pk)
 }
 
 // Circuit Selection
@@ -262,6 +294,16 @@ func (n *node) addProxyCircuit(circuit *ProxyCircuit) error {
 	n.proxiesLock.Lock()
 	defer n.proxiesLock.Unlock()
 	n.proxyCircuits = append(n.proxyCircuits, circuit)
+	return nil
+}
+
+func (n *node) addRelayCircuit(circuit *RelayCircuit) error {
+	if n.getRelayCircuit(circuit.id) != nil {
+		return xerrors.Errorf("The circuitId %s is already in the relay circuits", circuit.id)
+	}
+	n.relaysLock.Lock()
+	defer n.relaysLock.Unlock()
+	n.relayCircuits = append(n.relayCircuits, circuit)
 	return nil
 }
 

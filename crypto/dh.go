@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"github.com/monnand/dhkx"
 	"golang.org/x/xerrors"
-	"reflect"
 )
 
 type DiffieHellman struct {
@@ -62,11 +61,6 @@ func (dh *DiffieHellman) HandleNegotiation(publicKey []byte) ([]byte, error) {
 	}
 	dh.key = sharedKey
 	return dh.public, nil
-}
-
-func (dh *DiffieHellman) HandleAndVerifyNegotiation(publicKey []byte, preMasterSecret []byte) bool {
-	computedPk, err := dh.HandleNegotiation(publicKey)
-	return reflect.DeepEqual(computedPk, preMasterSecret) && err == nil
 }
 
 func (dh *DiffieHellman) GetMasterSecret() []byte {

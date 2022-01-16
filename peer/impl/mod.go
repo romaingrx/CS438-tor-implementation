@@ -43,7 +43,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	n.paxos = *n.NewPaxos(conf.PaxosID, conf.TotalPeers)
 	var err error
 	n.privateKey, err = crypto.GenerateKey(2048)
-	n.log.Fatalf("Error generating rsa parameters : %v", err)
+	if err != nil {
+		n.log.Fatalf("Error generating rsa parameters : %v", err)
+		return nil
+	}
 
 	// Register all callbacks for message types
 	n.conf.MessageRegistry.RegisterMessageCallback(types.ChatMessage{}, n.execChatMessage)
@@ -64,6 +67,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 
 	// Add own address in routing table
 	n.AddPeer(n.conf.Socket.GetAddress())
+	n.directory.Add(n.conf.Socket.GetAddress(), NodeInfo{
+		IP: n.conf.Socket.GetAddress(),
+		Pk: &n.privateKey.PublicKey,
+	})
 	return &n
 }
 
@@ -163,6 +170,7 @@ func (n *node) StartIncomingMessages() error {
 				// If the packet is for the current node, process it
 				if pkt.Header.Destination == n.conf.Socket.GetAddress() {
 					n.log.Println(n.Addr(), " received a new message of type ", pkt.Msg.Type, " from ", pkt.Header.Source)
+
 					err := n.conf.MessageRegistry.ProcessPacket(pkt)
 					if err != nil {
 						n.log.Printf("Error process packet %s: %v\n", n.conf.Socket.GetAddress(), err)
