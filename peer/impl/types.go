@@ -3,11 +3,12 @@ package impl
 import (
 	"crypto/rsa"
 	"fmt"
-	"golang.org/x/xerrors"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
+
+	"golang.org/x/xerrors"
 
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
@@ -226,38 +227,38 @@ func (m *NodesInfo) GetRandom(nb int, except []string) ([]string, error) {
 	var pickDic []string
 	for _, nodeInfo := range m.dic {
 		exceptIt := false
-		for _, exception := range except{
-			if exception == nodeInfo.IP{
+		for _, exception := range except {
+			if exception == nodeInfo.IP {
 				exceptIt = true
 			}
 		}
-		if !exceptIt{
+		if !exceptIt {
 			pickDic = append(pickDic, nodeInfo.IP)
 		}
 	}
 
 	var nodes []string
 	nodesIdx := rand.Perm(len(m.dic))[:nb]
-	for _, idx := range nodesIdx{
+	for _, idx := range nodesIdx {
 		nodes = append(nodes, pickDic[idx])
 	}
 	fmt.Println("Random nodes : ", nodes)
 	return nodes, nil
 }
 
-type RelayHttpRequest struct {
-	UID               string
-	DestinationIp     string
-	DestinationPort   string
-	RequestType       string
-	Data              []byte
-	ResponseData      []byte
-	ResponseReceived  bool
-	Active            bool
-	SentTimeStamp     time.Time
-	ReceivedTimeStamp time.Time
-	Notify            chan struct{}
-}
+// type RelayHttpRequest struct {
+// 	UID               string
+// 	DestinationIp     string
+// 	DestinationPort   string
+// 	RequestType       string
+// 	Data              []byte
+// 	ResponseData      []byte
+// 	ResponseReceived  bool
+// 	Active            bool
+// 	SentTimeStamp     time.Time
+// 	ReceivedTimeStamp time.Time
+// 	Notify            chan struct{}
+// }
 
 // Proxy node refers to the first node trying to initiate the circuit
 // Relay node is any node that receives messages and forwards it
@@ -277,7 +278,7 @@ type RelayCircuit struct {
 // Also includes extra information including which nodes are connected and their shared keys as well as metrics used for circuit selection
 type ProxyCircuit struct {
 	RelayCircuit
-	associatedMessage   *RelayHttpRequest //In case we've actually started sending a message through this circuit
+	associatedMessage   *types.RelayHttpRequest //In case we've actually started sending a message through this circuit
 	created             time.Time
 	lastUsed            time.Time
 	lastMetricMessage   string          //Refers to message id of the last metric message

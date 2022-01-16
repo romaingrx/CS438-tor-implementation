@@ -44,6 +44,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 
 		keyExchangeChan: ConcurrentMapChanMessage{items: make(map[string]chan types.Message), opened: make(map[string]bool)},
 		directory:       NewNodesInfo(),
+		messages:        make(map[string]*types.RelayHttpRequest),
 
 		// TODO tor ahmad: Create the structs
 	}
@@ -78,6 +79,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	n.conf.MessageRegistry.RegisterMessageCallback(types.KeyExchangeResponseMessage{}, n.execKeyExchangeResponseMessage)
 	n.conf.MessageRegistry.RegisterMessageCallback(types.NodeInfoMessage{}, n.execNodeInfoMessage)
 	// TODO tor ahmad: add your callbacks here
+	n.conf.MessageRegistry.RegisterMessageCallback(types.RelayDataRequestMessage{}, n.ExecRelayDataRequestMessage)
+	n.conf.MessageRegistry.RegisterMessageCallback(types.RelayDataResponseMessage{}, n.ExecRelayDataResponseMessage)
+	n.conf.MessageRegistry.RegisterMessageCallback(types.RelayMetricRequestMessage{}, n.ExecRelayMetricRequestMessage)
+	n.conf.MessageRegistry.RegisterMessageCallback(types.RelayMetricResponseMessage{}, n.ExecRelayMetricResponseMessage)
 
 	// Add own address in routing table
 	n.AddPeer(n.conf.Socket.GetAddress())
@@ -119,7 +124,7 @@ type node struct {
 
 	proxyCircuits []*ProxyCircuit
 	relayCircuits []*RelayCircuit
-	messages      map[string]*RelayHttpRequest
+	messages      map[string]*types.RelayHttpRequest
 
 	proxiesLock         sync.RWMutex
 	relaysLock          sync.RWMutex
@@ -200,7 +205,6 @@ func (n *node) StartSyncDirectoryKeys() error {
 		}
 		time.Sleep(1000 * time.Millisecond)
 	}
-
 
 	return nil
 }

@@ -16,7 +16,7 @@ func (RelayMetricRequestMessage) Name() string {
 
 // String implements types.Message.
 func (c RelayMetricRequestMessage) String() string {
-	return fmt.Sprintf("<%s:%s>", c.CircuitId, c.UID)
+	return fmt.Sprintf("<%s>", c.CircuitId)
 }
 
 // HTML implements types.Message.
@@ -38,7 +38,7 @@ func (RelayMetricResponseMessage) Name() string {
 
 // String implements types.Message.
 func (c RelayMetricResponseMessage) String() string {
-	return fmt.Sprintf("<%s:%s>", c.CircuitId, c.UID)
+	return fmt.Sprintf("<%s>", c.CircuitId)
 }
 
 // HTML implements types.Message.
@@ -60,7 +60,7 @@ func (RelayDataRequestMessage) Name() string {
 
 // String implements types.Message.
 func (c RelayDataRequestMessage) String() string {
-	return fmt.Sprintf("<%s:%s>", c.CircuitId, c.UID)
+	return fmt.Sprintf("<%s>", c.CircuitId)
 }
 
 // HTML implements types.Message.
@@ -82,7 +82,7 @@ func (RelayDataResponseMessage) Name() string {
 
 // String implements types.Message.
 func (c RelayDataResponseMessage) String() string {
-	return fmt.Sprintf("<%s:%s>", c.CircuitId, c.UID)
+	return fmt.Sprintf("<%s>", c.CircuitId)
 }
 
 // HTML implements types.Message.
@@ -155,6 +155,7 @@ func (c OnionLayerMessage) String() string {
 func (c OnionLayerMessage) HTML() string {
 	return c.String()
 }
+
 // NodeInfoMessage
 
 // NewEmpty implements types.Message.

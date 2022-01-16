@@ -1,19 +1,43 @@
 package types
 
-import "crypto/rsa"
+import (
+	"crypto/rsa"
+	"time"
+)
+
+type RelayHttpRequest struct {
+	UID               string
+	DestinationIp     string
+	DestinationPort   string
+	RequestType       string
+	Data              []byte
+	ResponseData      []byte
+	ResponseReceived  bool
+	Active            bool
+	SentTimeStamp     time.Time
+	ReceivedTimeStamp time.Time
+	Notify            chan struct{}
+}
 
 type RelayMetricRequestMessage struct {
 	CircuitId string
-	UID       string
+	Payload   []byte
+}
+type RelayMetricBody struct {
+	UID string
 }
 
 type RelayMetricResponseMessage struct {
 	CircuitId string
-	UID       string
+	Payload   []byte
 }
 
 type RelayDataRequestMessage struct {
-	CircuitId       string
+	CircuitId string
+	Payload   []byte
+}
+
+type RelayDataRequestBody struct {
 	UID             string
 	DestinationIp   string
 	DestinationPort string
@@ -23,8 +47,12 @@ type RelayDataRequestMessage struct {
 
 type RelayDataResponseMessage struct {
 	CircuitId string
-	UID       string
-	Data      []byte
+	Payload   []byte
+}
+
+type RelayDataResponseBody struct {
+	UID  string
+	Data []byte
 }
 
 type OnionLayerDirection bool

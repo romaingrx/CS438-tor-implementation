@@ -236,6 +236,12 @@ func start(c *urfave.Context) error {
 		PaxosProposerRetry: c.Duration("paxosproposerretry"),
 
 		DirectoryFilename: c.String("directoryfilename"),
+
+		MetricMessageRetry:    time.Second * 5,
+		MetricMessageInterval: time.Second * 2,
+		DataMessageRetry:      time.Second * 4,
+		DataMessageTimeout:    time.Second * 10,
+		CircuitSelectAlgo:     peer.RTT,
 	}
 
 	node := peerFactory(conf)
@@ -258,6 +264,13 @@ func start(c *urfave.Context) error {
 		fmt.Println("CREATE CIRCUIT")
 		fmt.Println(node.CreateRandomCircuit())
 		fmt.Println("CREATED CIRCUIT")
+		time.Sleep(2 * time.Second)
+		result, err := node.SendMessage("GET", "127.0.0.1", "9000", []byte("Hello Man"))
+		if err != nil {
+			fmt.Printf("Error sending message %s", err.Error())
+		} else {
+			fmt.Printf("Message sent at %s and got response %s at %s", result.SentTimeStamp.String(), string(result.Data), result.ReceivedTimeStamp.String())
+		}
 	}
 
 	time.Sleep(5 * time.Second)

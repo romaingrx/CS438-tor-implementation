@@ -81,7 +81,6 @@ func (n *node) CreateCircuit(nodes []string) error {
 			Parameters: Pk,
 		}
 
-
 		if idx > 0 {
 			msg.Extend = nod
 		}
@@ -125,6 +124,56 @@ func (n *node) CreateCircuit(nodes []string) error {
 	return n.addProxyCircuit(proxyCircuit)
 }
 
+func EncryptProxy(proxy ProxyCircuit, payload []byte) ([]byte, error) {
+
+	var err error
+	for reverseIdx := range proxy.AllMasterSecrets {
+		masterSecret := proxy.AllMasterSecrets[len(proxy.AllMasterSecrets)-reverseIdx-1]
+		payload, err = crypto.Encrypt(masterSecret, payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return payload, nil
+}
+
+func DecryptProxy(proxy ProxyCircuit, payload []byte) ([]byte, error) {
+	var err error
+
+	for _, masterSecret := range proxy.AllMasterSecrets {
+		payload, err = crypto.Decrypt(masterSecret, payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return payload, nil
+}
+
+func EncryptRelay(relay RelayCircuit, payload []byte) ([]byte, error) {
+	var err error
+	if relay.masterSecret != nil {
+		payload, err = crypto.Encrypt(relay.masterSecret, payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return payload, nil
+}
+
+func DecryptRelay(relay RelayCircuit, payload []byte) ([]byte, error) {
+
+	var err error
+	if relay.masterSecret != nil {
+		payload, err = crypto.Decrypt(relay.masterSecret, payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return payload, nil
+
+}
 func PackProxyOnionLayers(msg types.Message, proxyCircuit ProxyCircuit) (*types.OnionLayerMessage, error) {
 	var err error
 	msgBytes, err := json.Marshal(msg)
@@ -168,7 +217,7 @@ func PackRelayExitOnionLayer(msg types.Message, relayCircuit RelayCircuit) (*typ
 		Type:      msg.Name(),
 		Payload:   msgBytes,
 	}
-	if relayCircuit.masterSecret != nil{
+	if relayCircuit.masterSecret != nil {
 		onion.Payload, err = crypto.Encrypt(relayCircuit.masterSecret, onion.Payload)
 		if err != nil {
 			return nil, err
@@ -180,7 +229,7 @@ func PackRelayExitOnionLayer(msg types.Message, relayCircuit RelayCircuit) (*typ
 
 func PackRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCircuit) ([]byte, error) {
 	var err error
-	if relayCircuit.masterSecret != nil{
+	if relayCircuit.masterSecret != nil {
 		onion.Payload, err = crypto.Encrypt(relayCircuit.masterSecret, onion.Payload)
 		if err != nil {
 			return nil, err
@@ -191,7 +240,7 @@ func PackRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCircui
 
 func UnpeelRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCircuit) ([]byte, error) {
 	var err error
-	if relayCircuit.masterSecret != nil{
+	if relayCircuit.masterSecret != nil {
 		onion.Payload, err = crypto.Decrypt(relayCircuit.masterSecret, onion.Payload)
 		if err != nil {
 			return nil, err
@@ -258,9 +307,23 @@ func (n *node) CalculateCircuitsMetrics() {
 			continue // Skip if time elapsed since last metric request is less than retry threshold
 		}
 
+		metricBody := types.RelayMetricBody{
+			UID: xid.New().String(),
+		}
+
+		payload, err := json.Marshal(metricBody)
+		if err != nil {
+			continue
+		}
+
+		newPayload, err := EncryptProxy(*circuit, payload)
+		if err != nil {
+			continue
+		}
+
 		metricRequest := types.RelayMetricRequestMessage{
 			CircuitId: circuit.id,
-			UID:       xid.New().String(),
+			Payload:   newPayload,
 		}
 
 		metricsReqMsg, err := n.conf.MessageRegistry.MarshalMessage(metricRequest)
@@ -275,7 +338,7 @@ func (n *node) CalculateCircuitsMetrics() {
 			return
 		}
 
-		circuit.lastMetricMessage = metricRequest.UID
+		circuit.lastMetricMessage = metricBody.UID
 		circuit.lastMetricTimestamp = time.Now()
 	}
 
@@ -367,11 +430,19 @@ func (n *node) ExecRelayMetricRequestMessage(msg types.Message, pkt transport.Pa
 		return xerrors.Errorf("Cannot find circuit %s requested for metrics\n", metricRequestMsg.CircuitId)
 	}
 
+	decryptedPayload, err := DecryptRelay(*relayCircuit, metricRequestMsg.Payload)
+
+	if err != nil {
+		return errors.New(fmt.Sprint("Couldn't decrypt relay metric request message with circuit id %s", metricRequestMsg.CircuitId))
+	}
+
 	// If this is exit node, then send back response
 	if relayCircuit.nextCircuit == nil {
+
+		// Use Encrypted body
 		metricResponse := types.RelayMetricResponseMessage{
 			CircuitId: metricRequestMsg.CircuitId,
-			UID:       metricRequestMsg.UID,
+			Payload:   metricRequestMsg.Payload,
 		}
 
 		metricsResponseMsg, err := n.conf.MessageRegistry.MarshalMessage(metricResponse)
@@ -391,6 +462,7 @@ func (n *node) ExecRelayMetricRequestMessage(msg types.Message, pkt transport.Pa
 
 	// Update Circuit Id to be the next circuit id
 	metricRequestMsg.CircuitId = relayCircuit.nextCircuit.id
+	metricRequestMsg.Payload = decryptedPayload
 	metricsRequestMsg, err := n.conf.MessageRegistry.MarshalMessage(metricRequestMsg)
 	if err != nil {
 		return xerrors.Errorf("Error marshaling metric Request for circuit id %s\n", metricRequestMsg.CircuitId)
@@ -425,8 +497,15 @@ func (n *node) ExecRelayMetricResponseMessage(msg types.Message, pkt transport.P
 		// Message received by a relay node
 		// Forward it to previous circuit
 
+		//Encrypt it first
+		encryptedMsg, err := EncryptRelay(*relayCircuit, metricResponseMsg.Payload)
+		if err != nil {
+			return errors.New(fmt.Sprint("Couldn't encrypt relay metric response message with circuit id %s", metricResponseMsg.CircuitId))
+		}
+
 		// Update Circuit Id to be the next circuit id
 		metricResponseMsg.CircuitId = relayCircuit.beforeCircuit.id
+		metricResponseMsg.Payload = encryptedMsg
 		metricsResponseMsg, err := n.conf.MessageRegistry.MarshalMessage(metricResponseMsg)
 		if err != nil {
 			return xerrors.Errorf("Error marshaling metric Request for circuit id %s\n", metricResponseMsg.CircuitId)
@@ -452,7 +531,18 @@ func (n *node) RTT_Received(metricsResponseMessage *types.RelayMetricResponseMes
 	n.proxiesLock.Lock()
 	defer n.proxiesLock.Unlock()
 
-	if proxyCircuit.lastMetricMessage != metricsResponseMessage.UID {
+	metricBodyBytes, err := DecryptProxy(*proxyCircuit, metricsResponseMessage.Payload)
+	if err != nil {
+		n.log.Printf("Couldn't decrypt proxy metric response message with circuit id %s", metricsResponseMessage.CircuitId)
+	}
+
+	var metricsBody types.RelayMetricBody
+	err = json.Unmarshal(metricBodyBytes, &metricsBody)
+	if err != nil {
+		n.log.Printf("Couldn't unmarshall proxy metric response message with circuit id %s", metricsResponseMessage.CircuitId)
+	}
+
+	if proxyCircuit.lastMetricMessage != metricsBody.UID {
 		return // Metrics Message isn't the same!
 	}
 
@@ -590,7 +680,7 @@ func (n *node) SelectCircuitRTTCT() *ProxyCircuit {
 	return n.proxyCircuits[1]
 }
 
-func (n *node) SelectCircuit(request *RelayHttpRequest) *ProxyCircuit {
+func (n *node) SelectCircuit(request *types.RelayHttpRequest) *ProxyCircuit {
 	var proxy *ProxyCircuit
 
 	switch n.conf.CircuitSelectAlgo {
@@ -636,22 +726,30 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 	relayCircuit := n.getRelayCircuit(dataRequestMsg.CircuitId)
 
 	if relayCircuit == nil {
-		return xerrors.Errorf("Cannot find circuit %s requested for metrics\n", dataRequestMsg.CircuitId)
+		return xerrors.Errorf("Cannot find circuit %s requested for datas\n", dataRequestMsg.CircuitId)
 	}
+
+	decryptedPayload, err := DecryptRelay(*relayCircuit, dataRequestMsg.Payload)
+	if err != nil {
+		return xerrors.Errorf("Error decrypting data Request for circuit id %s\n", dataRequestMsg.CircuitId)
+	}
+
+	fmt.Printf("Received Data Request Message with Circuit id %s and payload %s", dataRequestMsg.CircuitId, string(decryptedPayload))
 
 	if relayCircuit.nextCircuit != nil {
 		// If this is a relay node then forward message
 
 		// Update Circuit Id to be the next circuit id
 		dataRequestMsg.CircuitId = relayCircuit.nextCircuit.id
+		dataRequestMsg.Payload = decryptedPayload
 		RequestMsg, err := n.conf.MessageRegistry.MarshalMessage(dataRequestMsg)
 		if err != nil {
-			return xerrors.Errorf("Error marshaling metric Request for circuit id %s\n", dataRequestMsg.CircuitId)
+			return xerrors.Errorf("Error marshaling data Request for circuit id %s\n", dataRequestMsg.CircuitId)
 		}
 
 		err = n.UnicastDirect(n.conf.Socket.GetAddress(), relayCircuit.nextCircuit.secondNode.IP, RequestMsg)
 		if err != nil {
-			return xerrors.Errorf("Error forwarding metric request for circuit id %s\n", dataRequestMsg.CircuitId)
+			return xerrors.Errorf("Error forwarding data request for circuit id %s\n", dataRequestMsg.CircuitId)
 		}
 
 		return nil
@@ -660,21 +758,42 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 	// If this is exit node, then send message to http server
 	// After receiving the result, send back response
 
+	var messageBody types.RelayDataRequestBody
+	err = json.Unmarshal(decryptedPayload, &messageBody)
+	if err != nil {
+		return xerrors.Errorf("Error unmarshaling data Request for circuit id %s\n", dataRequestMsg.CircuitId)
+	}
+
+	// Should send message to http request here!
+
+	dataReplyBody := &types.RelayDataResponseBody{
+		UID:  messageBody.UID,
+		Data: messageBody.Data,
+	}
+
+	dataReplyBodyBytes, err := json.Marshal(dataReplyBody)
+	if err != nil {
+		return xerrors.Errorf("Error marshaling data Response for circuit id %s\n", dataRequestMsg.CircuitId)
+	}
+	encryptedPayload, err := EncryptRelay(*relayCircuit, dataReplyBodyBytes)
+	if err != nil {
+		return xerrors.Errorf("Error encrypting data Response for circuit id %s\n", dataRequestMsg.CircuitId)
+	}
+
 	// TODO tor: send http request and attach paylod here
 	dataResponse := types.RelayDataResponseMessage{
 		CircuitId: dataRequestMsg.CircuitId,
-		UID:       dataRequestMsg.UID,
-		Data:      nil, // TODO tor: replace nil with actual data
+		Payload:   encryptedPayload,
 	}
 
 	dataResponseMsg, err := n.conf.MessageRegistry.MarshalMessage(dataResponse)
 	if err != nil {
-		return xerrors.Errorf("Error marshaling metric response for circuit id %s\n", dataResponse.CircuitId)
+		return xerrors.Errorf("Error marshaling data response for circuit id %s\n", dataResponse.CircuitId)
 	}
 
 	err = n.UnicastDirect(n.conf.Socket.GetAddress(), relayCircuit.firstNode.IP, dataResponseMsg)
 	if err != nil {
-		return xerrors.Errorf("Error sending metric request for circuit id %s\n", dataResponse.CircuitId)
+		return xerrors.Errorf("Error sending data request for circuit id %s\n", dataResponse.CircuitId)
 	}
 
 	return nil
@@ -688,6 +807,8 @@ func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Pac
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
+	fmt.Printf("Received Data Response Message with Circuit id %s and payload %s", dataResponseMsg.CircuitId, string(dataResponseMsg.Payload))
+
 	relayCircuit := n.getRelayCircuit(dataResponseMsg.CircuitId)
 	var proxyCircuit *ProxyCircuit
 	if relayCircuit == nil {
@@ -695,15 +816,22 @@ func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Pac
 	}
 
 	if relayCircuit == nil && proxyCircuit == nil {
-		return xerrors.Errorf("Cannot find circuit %s for metrics response\n", dataResponseMsg.CircuitId)
+		fmt.Printf("Cannot find circuit %s for data response\n", dataResponseMsg.CircuitId)
+		return xerrors.Errorf("Cannot find circuit %s for data response\n", dataResponseMsg.CircuitId)
 	}
 
 	if relayCircuit != nil {
 		// Message received by a relay node
 		// Forward it to previous circuit
 
+		encryptedPayload, err := EncryptRelay(*relayCircuit, dataResponseMsg.Payload)
+		if err != nil {
+			return xerrors.Errorf("Error encrypting data Response for circuit id %s\n", dataResponseMsg.CircuitId)
+		}
+
 		// Update Circuit Id to be the next circuit id
 		dataResponseMsg.CircuitId = relayCircuit.beforeCircuit.id
+		dataResponseMsg.Payload = encryptedPayload
 		metricsResponseMsg, err := n.conf.MessageRegistry.MarshalMessage(dataResponseMsg)
 		if err != nil {
 			return xerrors.Errorf("Error marshaling metric Request for circuit id %s\n", dataResponseMsg.CircuitId)
@@ -724,16 +852,36 @@ func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Pac
 
 func (n *node) DataReceived(dataResponse *types.RelayDataResponseMessage) {
 
-	n.log.Printf("Response Received for request with id %s : %s", dataResponse.UID, string(dataResponse.Data))
-	//TODO tor: notify sender that response has been received
-	n.torDataMessagesLock.Lock()
-	msg := n.messages[dataResponse.UID]
-	if !msg.Active {
-		n.log.Printf("Message Request already timed out")
+	proxyCircuit := n.getProxyCircuit(dataResponse.CircuitId)
+
+	if proxyCircuit == nil {
+		fmt.Printf("cant find proxy circuit with id %s\n", dataResponse.CircuitId)
+		return
+	}
+	decryptedPayload, err := DecryptProxy(*proxyCircuit, dataResponse.Payload)
+
+	if err != nil {
+		fmt.Printf("Error decrypting data response for proxy circuit id %s\n", dataResponse.CircuitId)
 		return
 	}
 
-	msg.ResponseData = dataResponse.Data
+	var messageBody types.RelayDataResponseBody
+	err = json.Unmarshal(decryptedPayload, &messageBody)
+	if err != nil {
+		fmt.Printf("Error unmarshaling data response for proxy circuit id %s\n", dataResponse.CircuitId)
+		return
+	}
+
+	fmt.Printf("Response Received for request with id %s : %s\n", messageBody.UID, string(messageBody.Data))
+	//TODO tor: notify sender that response has been received
+	n.torDataMessagesLock.Lock()
+	msg := n.messages[messageBody.UID]
+	if !msg.Active {
+		fmt.Printf("Message Request already timed out\n")
+		return
+	}
+
+	msg.ResponseData = messageBody.Data
 	msg.ResponseReceived = true
 	msg.ReceivedTimeStamp = time.Now()
 	n.torDataMessagesLock.Unlock()
@@ -742,8 +890,8 @@ func (n *node) DataReceived(dataResponse *types.RelayDataResponseMessage) {
 
 }
 
-func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []byte) (*RelayHttpRequest, error) {
-	dataReq := &RelayHttpRequest{
+func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []byte) (*types.RelayHttpRequest, error) {
+	dataReq := &types.RelayHttpRequest{
 		UID:               xid.New().String(),
 		DestinationIp:     destinationIp,
 		DestinationPort:   port,
@@ -766,11 +914,10 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 	c := n.SelectCircuit(dataReq)
 
 	if c == nil {
-		return nil, errors.New("no circuit selected for this message.")
+		return nil, errors.New("no circuit selected for this message")
 	}
 
-	dataRelayReq := &types.RelayDataRequestMessage{
-		CircuitId:       c.id,
+	dataReqBody := &types.RelayDataRequestBody{
 		UID:             dataReq.UID,
 		DestinationIp:   dataReq.DestinationIp,
 		DestinationPort: dataReq.DestinationPort,
@@ -778,14 +925,30 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		Data:            dataReq.Data,
 	}
 
+	dataReqBodyBytes, err := json.Marshal(dataReqBody)
+	fmt.Printf("Sending this message %s", string(dataReqBodyBytes))
+	if err != nil {
+		return nil, errors.New("Error marshaling data request for circuit id " + c.id)
+	}
+
+	encryptedPayload, err := EncryptProxy(*c, dataReqBodyBytes)
+	if err != nil {
+		return nil, errors.New("Error encrypting data request for proxy circuit id " + c.id)
+	}
+
+	dataRelayReq := &types.RelayDataRequestMessage{
+		CircuitId: c.id,
+		Payload:   encryptedPayload,
+	}
+
 	dataReqMsg, err := n.conf.MessageRegistry.MarshalMessage(dataRelayReq)
 	if err != nil {
-		return nil, errors.New("Error marshaling metric request for circuit id " + dataRelayReq.CircuitId)
+		return nil, errors.New("Error marshaling data request for circuit id " + dataRelayReq.CircuitId)
 	}
 
 	err = n.UnicastDirect(n.conf.Socket.GetAddress(), c.secondNode.IP, dataReqMsg)
 	if err != nil {
-		return nil, errors.New("Error sending metric request for circuit id " + dataRelayReq.CircuitId)
+		return nil, errors.New("Error sending data request for circuit id " + dataRelayReq.CircuitId)
 	}
 
 	// Every X minutes, each circuit gets sent a message that
@@ -844,7 +1007,7 @@ func (n *node) GetAllRelayCircuits() []RelayCircuit {
 	}
 	return cp
 }
-func (c *ProxyCircuit) String() string{
+func (c *ProxyCircuit) String() string {
 	return fmt.Sprintf(
 		"[Proxy Circuit %s] - first node %s - second node %s",
 		c.id,
@@ -853,21 +1016,21 @@ func (c *ProxyCircuit) String() string{
 	)
 }
 
-func (c *RelayCircuit) String() string{
+func (c *RelayCircuit) String() string {
 	return fmt.Sprintf(
 		"[Relay Circuit %s] - first node %s - second node %s",
 		c.id,
 		c.firstNode.IP,
 		c.secondNode.IP,
-		)
+	)
 }
 
 func (n *node) StringCircuits() string {
 	var s string
-	for _, c := range n.GetAllProxyCircuits(){
+	for _, c := range n.GetAllProxyCircuits() {
 		s = fmt.Sprintf("%s\n%s", s, c.String())
 	}
-	for _, c := range n.GetAllRelayCircuits(){
+	for _, c := range n.GetAllRelayCircuits() {
 		s = fmt.Sprintf("%s\n%s", s, c.String())
 	}
 	return s
