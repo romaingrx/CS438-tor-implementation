@@ -1,12 +1,14 @@
 package impl
 
 import (
+	"bufio"
 	"crypto/rsa"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 
@@ -41,7 +43,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		searchReply: sync.Map{},
 
 		keyExchangeChan: ConcurrentMapChanMessage{items: make(map[string]chan types.Message), opened: make(map[string]bool)},
-		directory: NewNodesInfo(),
+		directory:       NewNodesInfo(),
 
 		// TODO tor ahmad: Create the structs
 	}
@@ -74,6 +76,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	n.conf.MessageRegistry.RegisterMessageCallback(types.OnionLayerMessage{}, n.execOnionLayerMessage)
 	n.conf.MessageRegistry.RegisterMessageCallback(types.KeyExchangeRequestMessage{}, n.execKeyExchangeRequestMessage)
 	n.conf.MessageRegistry.RegisterMessageCallback(types.KeyExchangeResponseMessage{}, n.execKeyExchangeResponseMessage)
+	n.conf.MessageRegistry.RegisterMessageCallback(types.NodeInfoMessage{}, n.execNodeInfoMessage)
 	// TODO tor ahmad: add your callbacks here
 
 	// Add own address in routing table
@@ -82,6 +85,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		IP: n.conf.Socket.GetAddress(),
 		Pk: &n.privateKey.PublicKey,
 	})
+
 	return &n
 }
 
@@ -150,6 +154,53 @@ func (n *node) Start() error {
 	if err != nil {
 		return err
 	}
+
+	return n.StartSyncDirectoryKeys()
+}
+
+func (n *node) StartSyncDirectoryKeys() error {
+	fmt.Println("Start fetching the keys")
+	defer func() { fmt.Println("Fetched all keys") }()
+	filename := n.conf.DirectoryFilename
+	fd, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+
+	scanner := bufio.NewScanner(fd)
+	for scanner.Scan() {
+		n.AddPeer(scanner.Text())
+	}
+
+	stillNeedToFetch := make(map[string]string)
+	for k, v := range n.routingTable {
+		if k == n.conf.Socket.GetAddress() {
+			continue
+		}
+		stillNeedToFetch[k] = v
+	}
+
+	for len(stillNeedToFetch) > 0 {
+		for ip, _ := range stillNeedToFetch {
+			if n.directory.Exists(ip) {
+				fmt.Println("Received the key for ip ", ip)
+				delete(stillNeedToFetch, ip)
+			} else {
+				request := types.NodeInfoMessage{Request: true}
+				transportMsg, err := n.conf.MessageRegistry.MarshalMessage(request)
+				if err != nil {
+					return err
+				}
+				err = n.UnicastDirect(n.conf.Socket.GetAddress(), ip, transportMsg)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		time.Sleep(1000 * time.Millisecond)
+	}
+
 
 	return nil
 }

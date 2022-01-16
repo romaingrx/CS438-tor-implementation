@@ -145,6 +145,11 @@ func main() {
 						Usage: "The timeout after which a paxos proposer retries",
 						Value: time.Second * 5,
 					},
+					&urfave.StringFlag{
+						Name:  "directoryfilename",
+						Usage: "The filename containing all directory nodes",
+						Value: "directory.txt",
+					},
 				},
 				Action: start,
 			},
@@ -224,6 +229,8 @@ func start(c *urfave.Context) error {
 		},
 		PaxosID:            paxosID,
 		PaxosProposerRetry: c.Duration("paxosproposerretry"),
+
+		DirectoryFilename: c.String("directoryfilename"),
 	}
 
 	node := peerFactory(conf)

@@ -134,7 +134,7 @@ func (c KeyExchangeResponseMessage) HTML() string {
 	return c.String()
 }
 
-// RelayMetricRequestMessage
+// OnionLayerMessage
 
 // NewEmpty implements types.Message.
 func (c OnionLayerMessage) NewEmpty() Message {
@@ -153,5 +153,26 @@ func (c OnionLayerMessage) String() string {
 
 // HTML implements types.Message.
 func (c OnionLayerMessage) HTML() string {
+	return c.String()
+}
+// NodeInfoMessage
+
+// NewEmpty implements types.Message.
+func (c NodeInfoMessage) NewEmpty() Message {
+	return &NodeInfoMessage{}
+}
+
+// Name implements types.Message.
+func (NodeInfoMessage) Name() string {
+	return "nodeinfo"
+}
+
+// String implements types.Message.
+func (c NodeInfoMessage) String() string {
+	return fmt.Sprintf("<%s:request=%s>", c.IP, c.Request)
+}
+
+// HTML implements types.Message.
+func (c NodeInfoMessage) HTML() string {
 	return c.String()
 }

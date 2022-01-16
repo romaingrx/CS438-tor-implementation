@@ -503,7 +503,7 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 			masterSecret:  KeyExchangeAlgo.GetMasterSecret(),
 		}
 		err = n.addRelayCircuit(&newRelayCircuit)
-		if err != nil{
+		if err != nil {
 			return err
 		}
 
@@ -539,7 +539,7 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 		}
 		relayCircuit.nextCircuit = &newRelayCircuit
 		err := n.addRelayCircuit(&newRelayCircuit)
-		if err != nil{
+		if err != nil {
 			return err
 		}
 
@@ -681,10 +681,40 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 			}
 
 			pkt.Msg = &transportMsg
-			n.conf.MessageRegistry.ProcessPacket(pkt)
-			return nil
+			return n.conf.MessageRegistry.ProcessPacket(pkt)
 		}
 		return xerrors.Errorf("Do not know the circuitId %s", onion.CircuitId)
+	}
+	return nil
+}
+
+func (n *node) execNodeInfoMessage(msg types.Message, pkt transport.Packet) error {
+	nodeInfoMsg, ok := msg.(*types.NodeInfoMessage)
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	if nodeInfoMsg.Request {
+		responseNodeInfoMsg := types.NodeInfoMessage{
+			IP:        n.conf.Socket.GetAddress(),
+			PublicKey: &n.privateKey.PublicKey,
+			Request:   false,
+		}
+
+		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(responseNodeInfoMsg)
+		if err != nil {
+			return err
+		}
+
+		return n.UnicastDirect(responseNodeInfoMsg.IP, pkt.Header.Source, transportMsg)
+	}
+
+	ok = n.directory.Add(nodeInfoMsg.IP, NodeInfo{
+		IP: nodeInfoMsg.IP,
+		Pk: nodeInfoMsg.PublicKey,
+	})
+	if !ok {
+		return xerrors.Errorf("The node %s was already in the directory")
 	}
 	return nil
 }

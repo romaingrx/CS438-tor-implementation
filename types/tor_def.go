@@ -1,5 +1,7 @@
 package types
 
+import "crypto/rsa"
+
 type RelayMetricRequestMessage struct {
 	CircuitId string
 	UID       string
@@ -50,4 +52,10 @@ type KeyExchangeResponseMessage struct {
 	CircuitId  string
 	Parameters []byte
 	Signature  []byte
+}
+
+type NodeInfoMessage struct {
+	IP        string
+	PublicKey *rsa.PublicKey
+	Request   bool
 }

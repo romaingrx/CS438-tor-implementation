@@ -183,10 +183,16 @@ type NodesInfo struct {
 
 func NewNodesInfo() NodesInfo {
 	return NodesInfo{
-		dic : make(map[string]NodeInfo),
+		dic: make(map[string]NodeInfo),
 	}
 }
 
+func (m *NodesInfo) Exists(ip string) bool {
+	m.Lock()
+	defer m.Unlock()
+	_, ok := m.dic[ip]
+	return ok
+}
 func (m *NodesInfo) Add(ip string, value NodeInfo) bool {
 	m.Lock()
 	defer m.Unlock()
