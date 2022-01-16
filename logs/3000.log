@@ -1,24 +1,24 @@
-[90m2022-01-16T20:40:43+01:00[0m [32mINF[0m [1mmod.go:188[0m[36m >[0m peer addr: '127.0.0.1:3000' [36mrole=[0m"cli node"
+[90m2022-01-16T20:50:07+01:00[0m [32mINF[0m [1mmod.go:188[0m[36m >[0m peer addr: '127.0.0.1:3000' [36mrole=[0m"cli node"
 Start fetching the keys
-Received the key for ip  127.0.0.1:3002
 Received the key for ip  127.0.0.1:3003
 Received the key for ip  127.0.0.1:3001
+Received the key for ip  127.0.0.1:3002
 Fetched all keys
 CREATE CIRCUIT
 Random nodes :  [127.0.0.1:3003 127.0.0.1:3001 127.0.0.1:3002]
-Initial circuit id  c7i79fb14gu9m5ab4rq0
-[90m2022-01-16T20:40:45+01:00[0m [32mINF[0m [1mhome/ahmad/Documents/Fall21/DSE/CS438-tor-implementation/gui/httpnode/mod.go:157[0m[36m >[0m proxy server is starting... [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
-[90m2022-01-16T20:40:45+01:00[0m [32mINF[0m [1mhome/ahmad/Documents/Fall21/DSE/CS438-tor-implementation/gui/httpnode/mod.go:172[0m[36m >[0m proxy server is ready to handle requests at '127.0.0.1:44113' [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
-Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3003 for circuit id c7i79fb14gu9m5ab4rq0 
-Received key exchange response on the channel c7i79fb14gu9m5ab4rq0
-Verified key exchange response on the channel c7i79fb14gu9m5ab4rq0
-Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3003 for circuit id c7i79fb14gu9m5ab4rq0 
-Received key exchange response on the channel c7i79fb14gu9m5ab4rq0
-Verified key exchange response on the channel c7i79fb14gu9m5ab4rq0
-Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3003 for circuit id c7i79fb14gu9m5ab4rq0 
-Received key exchange response on the channel c7i79fb14gu9m5ab4rq0
-Verified key exchange response on the channel c7i79fb14gu9m5ab4rq0
-The circuitId c7i79fb14gu9m5ab4rq0 is already in the proxy circuits
+Initial circuit id  c7i7dsb14gua52omnc80
+[90m2022-01-16T20:50:09+01:00[0m [32mINF[0m [1mhome/ahmad/Documents/Fall21/DSE/CS438-tor-implementation/gui/httpnode/mod.go:157[0m[36m >[0m proxy server is starting... [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
+[90m2022-01-16T20:50:09+01:00[0m [32mINF[0m [1mhome/ahmad/Documents/Fall21/DSE/CS438-tor-implementation/gui/httpnode/mod.go:172[0m[36m >[0m proxy server is ready to handle requests at '127.0.0.1:41151' [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
+Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3003 for circuit id c7i7dsb14gua52omnc80 
+Received key exchange response on the channel c7i7dsb14gua52omnc80
+Verified key exchange response on the channel c7i7dsb14gua52omnc80
+Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3003 for circuit id c7i7dsb14gua52omnc80 
+Received key exchange response on the channel c7i7dsb14gua52omnc80
+Verified key exchange response on the channel c7i7dsb14gua52omnc80
+Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3003 for circuit id c7i7dsb14gua52omnc80 
+Received key exchange response on the channel c7i7dsb14gua52omnc80
+Verified key exchange response on the channel c7i7dsb14gua52omnc80
+The circuitId c7i7dsb14gua52omnc80 is already in the proxy circuits
 CREATED CIRCUIT
-Sending this message {"UID":"c7i79fr14gu9m5ab4rs0","DestinationIp":"127.0.0.1","DestinationPort":"9000","RequestType":"GET","Data":"SGVsbG8gTWFu"}Received Data Response Message with Circuit id c7i79fb14gu9m5ab4rq0 and payload ±(Ô%Ú•cP8GÛ»ív‡*}¿È>É>~ôöK#kÏÛÇ¸iîÉYò]‹^æúkIj[é»~Œç²ù÷=İ¶q&]£ ‡Ì¸œError decrypting data response for proxy circuit id c7i79fb14gu9m5ab4rq0
+Sending this message {"UID":"c7i7dsr14gua52omnca0","DestinationIp":"127.0.0.1","DestinationPort":"9000","RequestType":"GET","Data":"SGVsbG8gTWFu"}Received Data Response Message with Circuit id c7i7dsb14gua52omnc80 and payload Ê'=Ìo ÇK÷Å©*-£\j°ßÙ9,ªææ1±Cnì«¡as_‹C4—šùìU˜oÃÿ?İò×oß–»®%ñó¿ğoÒæ?Rö$Error decrypting data response for proxy circuit id c7i7dsb14gua52omnc80 and error cipher: message authentication failed
 Error sending message message response waiting timeout

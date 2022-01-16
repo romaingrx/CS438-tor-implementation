@@ -861,7 +861,7 @@ func (n *node) DataReceived(dataResponse *types.RelayDataResponseMessage) {
 	decryptedPayload, err := DecryptProxy(*proxyCircuit, dataResponse.Payload)
 
 	if err != nil {
-		fmt.Printf("Error decrypting data response for proxy circuit id %s\n", dataResponse.CircuitId)
+		fmt.Printf("Error decrypting data response for proxy circuit id %s and error %s\n", dataResponse.CircuitId, err.Error())
 		return
 	}
 
