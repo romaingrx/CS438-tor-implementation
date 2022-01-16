@@ -39,6 +39,11 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		ackHandler:  make(chan AckTracker),
 		dataReply:   sync.Map{},
 		searchReply: sync.Map{},
+
+		keyExchangeChan: ConcurrentMapChanMessage{items: make(map[string]chan types.Message), opened: make(map[string]bool)},
+		directory: NewNodesInfo(),
+
+		// TODO tor ahmad: Create the structs
 	}
 	n.paxos = *n.NewPaxos(conf.PaxosID, conf.TotalPeers)
 	var err error
@@ -64,6 +69,12 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	n.conf.MessageRegistry.RegisterMessageCallback(types.PaxosProposeMessage{}, n.execPaxosProposeMessage)
 	n.conf.MessageRegistry.RegisterMessageCallback(types.PaxosAcceptMessage{}, n.execPaxosAcceptMessage)
 	n.conf.MessageRegistry.RegisterMessageCallback(types.TLCMessage{}, n.execTLCMessage)
+
+	// Register all callbacks for tor message types
+	n.conf.MessageRegistry.RegisterMessageCallback(types.OnionLayerMessage{}, n.execOnionLayerMessage)
+	n.conf.MessageRegistry.RegisterMessageCallback(types.KeyExchangeRequestMessage{}, n.execKeyExchangeRequestMessage)
+	n.conf.MessageRegistry.RegisterMessageCallback(types.KeyExchangeResponseMessage{}, n.execKeyExchangeResponseMessage)
+	// TODO tor ahmad: add your callbacks here
 
 	// Add own address in routing table
 	n.AddPeer(n.conf.Socket.GetAddress())

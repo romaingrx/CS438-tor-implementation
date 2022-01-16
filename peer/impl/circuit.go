@@ -25,14 +25,14 @@ func (n *node) AddNodeToDirectory(name string, info NodeInfo, update bool) error
 }
 
 func (n *node) AddNodesToDirectory(nodesInfo map[string]NodeInfo) error {
-	var errors []string
+	var errs []string
 	for name, info := range nodesInfo {
 		if err := n.AddNodeToDirectory(name, info, false); err != nil {
-			errors = append(errors, fmt.Sprintf("%v", err))
+			errs = append(errs, fmt.Sprintf("%v", err))
 		}
 	}
 
-	return xerrors.Errorf("%s", strings.Join(errors, "\n"))
+	return xerrors.Errorf("%s", strings.Join(errs, "\n"))
 }
 
 // CreateRandomCircuit will construct and exchange keys with random nodes

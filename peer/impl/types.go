@@ -181,6 +181,12 @@ type NodesInfo struct {
 	dic map[string]NodeInfo
 }
 
+func NewNodesInfo() NodesInfo {
+	return NodesInfo{
+		dic : make(map[string]NodeInfo),
+	}
+}
+
 func (m *NodesInfo) Add(ip string, value NodeInfo) bool {
 	m.Lock()
 	defer m.Unlock()

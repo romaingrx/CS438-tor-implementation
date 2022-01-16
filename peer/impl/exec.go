@@ -502,7 +502,10 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 			nextCircuit:   nil,
 			masterSecret:  KeyExchangeAlgo.GetMasterSecret(),
 		}
-		n.addRelayCircuit(&newRelayCircuit)
+		err = n.addRelayCircuit(&newRelayCircuit)
+		if err != nil{
+			return err
+		}
 
 		// Send back a key exchange response
 		keyExchangeResponseMsg := types.KeyExchangeResponseMessage{
@@ -535,7 +538,10 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 			masterSecret:  nil,
 		}
 		relayCircuit.nextCircuit = &newRelayCircuit
-		n.addRelayCircuit(&newRelayCircuit)
+		err := n.addRelayCircuit(&newRelayCircuit)
+		if err != nil{
+			return err
+		}
 
 		keyExchangeRequestMsg.CircuitId = newRelayCircuit.id
 		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(keyExchangeRequestMsg)
@@ -617,8 +623,7 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 		}
 
 		pkt.Msg = &transportMsg
-		n.conf.MessageRegistry.ProcessPacket(pkt)
-		return nil
+		return n.conf.MessageRegistry.ProcessPacket(pkt)
 
 	} else if relayCircuit := n.getRelayCircuit(onion.CircuitId); relayCircuit != nil {
 		var nextIP string
@@ -635,8 +640,7 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 				}
 
 				pkt.Msg = &transportMsg
-				n.conf.MessageRegistry.ProcessPacket(pkt)
-				return nil
+				return n.conf.MessageRegistry.ProcessPacket(pkt)
 			}
 
 			nextCircuit := relayCircuit.nextCircuit
