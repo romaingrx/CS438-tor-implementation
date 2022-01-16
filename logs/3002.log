@@ -1,18 +1,12 @@
-[90m2022-01-16T15:48:11+01:00[0m [32mINF[0m [1mmod.go:188[0m[36m >[0m peer addr: '127.0.0.1:3002' [36mrole=[0m"cli node"
+[90m2022-01-16T18:52:14+01:00[0m [32mINF[0m [1mmod.go:188[0m[36m >[0m peer addr: '127.0.0.1:3002' [36mrole=[0m"cli node"
 Start fetching the keys
-Received the key for ip  127.0.0.1:3003
 Received the key for ip  127.0.0.1:3000
 Received the key for ip  127.0.0.1:3001
+Received the key for ip  127.0.0.1:3003
 Fetched all keys
-[90m2022-01-16T15:48:13+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:157[0m[36m >[0m proxy server is starting... [36mpeerAddr=[0m127.0.0.1:3002 [36mrole=[0m"proxy http"
-[90m2022-01-16T15:48:13+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:172[0m[36m >[0m proxy server is ready to handle requests at '127.0.0.1:43035' [36mpeerAddr=[0m127.0.0.1:3002 [36mrole=[0m"proxy http"
-Received an onion with create from  127.0.0.1:3001  for circuit id  c7i30bfg8s2mfleeuun0
+[90m2022-01-16T18:52:16+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:157[0m[36m >[0m proxy server is starting... [36mpeerAddr=[0m127.0.0.1:3002 [36mrole=[0m"proxy http"
+[90m2022-01-16T18:52:16+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:172[0m[36m >[0m proxy server is ready to handle requests at '127.0.0.1:44923' [36mpeerAddr=[0m127.0.0.1:3002 [36mrole=[0m"proxy http"
+Received an onion with create from  127.0.0.1:3003  for circuit id  c7i5mkfg8s2qh3vnu4fg
 Exec the key request
-Received an onion of type keyexchangerequest for relay from 127.0.0.1:3001 for circuit id c7i30bfg8s2mfleeuun0 
-Extend the circuit  c7i30bfg8s2mfleeuun0  to node  127.0.0.1:3003
-Forward relay for circuit  c7i30bfg8s2mfmdp5hog
-Received an onion of type keyexchangeresponse for relay from 127.0.0.1:3003 for circuit id c7i30bfg8s2mfmdp5hog 
-Backward relay for circuit  c7i30bfg8s2mfleeuun0
 
-[Relay Circuit c7i30bfg8s2mfleeuun0] - first node 127.0.0.1:3001 - second node 127.0.0.1:3002
-[Relay Circuit c7i30bfg8s2mfmdp5hog] - first node 127.0.0.1:3002 - second node 127.0.0.1:3003
+[Relay Circuit c7i5mkfg8s2qh3vnu4fg] - first node 127.0.0.1:3003 - second node 127.0.0.1:3002

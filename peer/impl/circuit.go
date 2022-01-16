@@ -38,7 +38,7 @@ func (n *node) AddNodesToDirectory(nodesInfo map[string]NodeInfo) error {
 // CreateRandomCircuit will construct and exchange keys with random nodes
 func (n *node) CreateRandomCircuit() error {
 	// TODO tor: check that this all nodes are different
-	nodes, err := n.directory.GetRandom(3)
+	nodes, err := n.directory.GetRandom(3, []string{n.conf.Socket.GetAddress()})
 	if err != nil {
 		return err
 	}
@@ -62,6 +62,11 @@ func (n *node) CreateCircuit(nodes []string) error {
 		n.directory.GetNodeInfo(n.conf.Socket.GetAddress()),
 		n.directory.GetNodeInfo(nodes[0]),
 	)
+	fmt.Println("Initial circuit id ", proxyCircuit.id)
+	err := n.addProxyCircuit(proxyCircuit)
+	if err != nil {
+		return err
+	}
 
 	for idx, nod := range nodes {
 		// First generate a private, public key for this particular node
@@ -75,6 +80,7 @@ func (n *node) CreateCircuit(nodes []string) error {
 			CircuitId:  proxyCircuit.id,
 			Parameters: Pk,
 		}
+
 
 		if idx > 0 {
 			msg.Extend = nod
@@ -97,10 +103,12 @@ func (n *node) CreateCircuit(nodes []string) error {
 
 		select {
 		case msg := <-*n.keyExchangeChan.Get(proxyCircuit.id):
+			fmt.Printf("Received key exchange response on the channel %s\n", proxyCircuit.id)
 			if reply, ok := msg.(types.KeyExchangeResponseMessage); ok {
 				if !n.VerifyKeyExchangeResponse(nod, reply) {
 					return xerrors.Errorf("Failed to verify the signature of a key exchange response from node %s", nod)
 				}
+				fmt.Printf("Verified key exchange response on the channel %s\n", proxyCircuit.id)
 				KeyExchangeAlgo.HandleNegotiation(reply.Parameters)
 
 				// If every test passes, then add this node and the master secret in the circuit and continue
@@ -114,8 +122,7 @@ func (n *node) CreateCircuit(nodes []string) error {
 
 	}
 
-	n.addProxyCircuit(proxyCircuit)
-	return nil
+	return n.addProxyCircuit(proxyCircuit)
 }
 
 func PackProxyOnionLayers(msg types.Message, proxyCircuit ProxyCircuit) (*types.OnionLayerMessage, error) {
@@ -152,12 +159,45 @@ func UnpeelProxyOnionLayers(onion types.OnionLayerMessage, proxyCircuit ProxyCir
 	return onion.Payload, nil
 }
 
+func PackRelayExitOnionLayer(msg types.Message, relayCircuit RelayCircuit) (*types.OnionLayerMessage, error) {
+	var err error
+	msgBytes, err := json.Marshal(msg)
+	onion := types.OnionLayerMessage{
+		CircuitId: relayCircuit.id,
+		Direction: types.OnionLayerBackward,
+		Type:      msg.Name(),
+		Payload:   msgBytes,
+	}
+	if relayCircuit.masterSecret != nil{
+		onion.Payload, err = crypto.Encrypt(relayCircuit.masterSecret, onion.Payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &onion, nil
+}
+
 func PackRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCircuit) ([]byte, error) {
-	return crypto.Encrypt(relayCircuit.masterSecret, onion.Payload)
+	var err error
+	if relayCircuit.masterSecret != nil{
+		onion.Payload, err = crypto.Encrypt(relayCircuit.masterSecret, onion.Payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return onion.Payload, nil
 }
 
 func UnpeelRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCircuit) ([]byte, error) {
-	return crypto.Decrypt(relayCircuit.masterSecret, onion.Payload)
+	var err error
+	if relayCircuit.masterSecret != nil{
+		onion.Payload, err = crypto.Decrypt(relayCircuit.masterSecret, onion.Payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return onion.Payload, nil
 }
 
 // func (n *node) DEPERECATEDPackOnionLayersUntil(msg types.Message, circuitIds []string, nodes []string, masterSecrets [][]byte, to string) (*types.OnionLayerMessage, error) {
@@ -192,7 +232,7 @@ func UnpeelRelayOnionLayer(onion types.OnionLayerMessage, relayCircuit RelayCirc
 // }
 
 func GetBytesToSign(response types.KeyExchangeResponseMessage) []byte {
-	return append([]byte(response.CircuitId), response.Parameters...)
+	return response.Parameters
 }
 
 func (n *node) SignKeyExchangeResponse(key *rsa.PrivateKey, response types.KeyExchangeResponseMessage) ([]byte, error) {
@@ -781,8 +821,54 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		}
 
 	}
-
-	return nil, nil
 }
 
 // End Messages/Data Relay
+
+func (n *node) GetAllProxyCircuits() []ProxyCircuit {
+	n.proxiesLock.Lock()
+	defer n.proxiesLock.Unlock()
+	cp := make([]ProxyCircuit, len(n.proxyCircuits))
+	for idx, c := range n.proxyCircuits {
+		cp[idx] = *c
+	}
+	return cp
+}
+
+func (n *node) GetAllRelayCircuits() []RelayCircuit {
+	n.relaysLock.Lock()
+	defer n.relaysLock.Unlock()
+	cp := make([]RelayCircuit, len(n.relayCircuits))
+	for idx, c := range n.relayCircuits {
+		cp[idx] = *c
+	}
+	return cp
+}
+func (c *ProxyCircuit) String() string{
+	return fmt.Sprintf(
+		"[Proxy Circuit %s] - first node %s - second node %s",
+		c.id,
+		c.firstNode.IP,
+		c.secondNode.IP,
+	)
+}
+
+func (c *RelayCircuit) String() string{
+	return fmt.Sprintf(
+		"[Relay Circuit %s] - first node %s - second node %s",
+		c.id,
+		c.firstNode.IP,
+		c.secondNode.IP,
+		)
+}
+
+func (n *node) StringCircuits() string {
+	var s string
+	for _, c := range n.GetAllProxyCircuits(){
+		s = fmt.Sprintf("%s\n%s", s, c.String())
+	}
+	for _, c := range n.GetAllRelayCircuits(){
+		s = fmt.Sprintf("%s\n%s", s, c.String())
+	}
+	return s
+}

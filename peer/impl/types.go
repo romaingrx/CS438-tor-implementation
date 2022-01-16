@@ -2,6 +2,7 @@ package impl
 
 import (
 	"crypto/rsa"
+	"fmt"
 	"golang.org/x/xerrors"
 	"math"
 	"math/rand"
@@ -214,25 +215,33 @@ func (m *NodesInfo) GetPublicKey(ip string) *rsa.PublicKey {
 	return nodeInfo.Pk
 }
 
-func (m *NodesInfo) GetRandom(nb int) ([]string, error) {
+func (m *NodesInfo) GetRandom(nb int, except []string) ([]string, error) {
 	m.Lock()
 	defer m.Unlock()
-	if len(m.dic) < nb {
-		return nil, xerrors.Errorf("Not enough nodes (%d) in the dictionary to pick %d nodes", len(m.dic), nb)
+
+	pickNb := len(m.dic) - len(except)
+	if pickNb < nb {
+		return nil, xerrors.Errorf("Not enough nodes (%d) in the dictionary to pick %d nodes", pickNb, nb)
 	}
+	var pickDic []string
+	for _, nodeInfo := range m.dic {
+		exceptIt := false
+		for _, exception := range except{
+			if exception == nodeInfo.IP{
+				exceptIt = true
+			}
+		}
+		if !exceptIt{
+			pickDic = append(pickDic, nodeInfo.IP)
+		}
+	}
+
 	var nodes []string
 	nodesIdx := rand.Perm(len(m.dic))[:nb]
-	var idx = 0
-	for _, nodeInfo := range m.dic {
-		if len(nodesIdx) == 0 {
-			break
-		}
-		if idx == nodesIdx[0] {
-			nodes = append(nodes, nodeInfo.IP)
-			nodesIdx = nodesIdx[1:]
-		}
-		idx++
+	for _, idx := range nodesIdx{
+		nodes = append(nodes, pickDic[idx])
 	}
+	fmt.Println("Random nodes : ", nodes)
 	return nodes, nil
 }
 
@@ -318,11 +327,10 @@ type ConcurrentMapChanMessage struct {
 // CreateIfNotExists declare a new entry if it doesn't exist yet
 func (m *ConcurrentMapChanMessage) CreateIfNotExists(key string) {
 	m.Lock()
-	if !m.opened[key] {
+	defer m.Unlock()
+	if _, ok := m.items[key]; !ok {
 		m.items[key] = make(chan types.Message)
-		m.opened[key] = true
 	}
-	m.Unlock()
 }
 
 // Set is the threadsafe set function
@@ -334,9 +342,10 @@ func (m *ConcurrentMapChanMessage) Set(key string, value chan types.Message) {
 
 // Get is the threadsafe get function
 func (m *ConcurrentMapChanMessage) Get(key string) *chan types.Message {
+	m.CreateIfNotExists(key)
 	m.Lock()
-	item, _ := m.items[key]
-	m.Unlock()
+	defer m.Unlock()
+	item := m.items[key]
 	return &item
 }
 

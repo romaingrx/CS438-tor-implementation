@@ -1,7 +1,7 @@
 package crypto
 
 import (
-	"crypto"
+	cryp "crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -12,16 +12,31 @@ func GenerateKey(keySize int) (*rsa.PrivateKey, error) {
 }
 
 func Sign(data []byte, privateKey *rsa.PrivateKey) ([]byte, error) {
-	hashedData := sha256.Sum256(data)
-
-	signature, err := rsa.SignPSS(rand.Reader, privateKey, crypto.SHA256, hashedData[:], nil)
+	msgHash := sha256.New()
+	_, err := msgHash.Write(data)
 	if err != nil {
 		return nil, err
 	}
+	msgHashSum := msgHash.Sum(nil)
 
-	return signature, nil
+	return rsa.SignPSS(rand.Reader, privateKey, cryp.SHA256, msgHashSum, nil)
 }
 
 func Verify(data, signature []byte, publicKey *rsa.PublicKey) bool {
-	return rsa.VerifyPSS(publicKey, crypto.SHA256, data, signature, nil) == nil
+	msgHash := sha256.New()
+	_, err := msgHash.Write(data)
+	if err != nil {
+		return false
+	}
+	msgHashSum := msgHash.Sum(nil)
+	return rsa.VerifyPSS(publicKey, cryp.SHA256, msgHashSum, signature, nil) == nil
+}
+func VerifyErr(data, signature []byte, publicKey *rsa.PublicKey) error {
+	msgHash := sha256.New()
+	_, err := msgHash.Write(data)
+	if err != nil {
+		return err
+	}
+	msgHashSum := msgHash.Sum(nil)
+	return rsa.VerifyPSS(publicKey, cryp.SHA256, msgHashSum, signature, nil)
 }

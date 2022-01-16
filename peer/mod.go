@@ -14,6 +14,7 @@ type Peer interface {
 	Service
 	Messaging
 	DataSharing
+	Onion
 }
 
 // Factory is the type of function we are using to create new instances of
@@ -86,6 +87,8 @@ type Configuration struct {
 	DataMessageRetry      time.Duration
 	DataMessageTimeout    time.Duration
 	CircuitSelectAlgo     CircuitSelectAlgorithm
+
+	DirectoryFilename string
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must
