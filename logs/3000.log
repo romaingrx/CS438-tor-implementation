@@ -1,0 +1,24 @@
+[90m2022-01-16T15:48:11+01:00[0m [32mINF[0m [1mmod.go:188[0m[36m >[0m peer addr: '127.0.0.1:3000' [36mrole=[0m"cli node"
+Start fetching the keys
+Received the key for ip  127.0.0.1:3001
+Received the key for ip  127.0.0.1:3002
+Received the key for ip  127.0.0.1:3003
+Fetched all keys
+CREATE CIRCUIT
+Random nodes :  [127.0.0.1:3001 127.0.0.1:3002 127.0.0.1:3003]
+Initial circuit id  c7i30bfg8s2mfjuqo410
+[90m2022-01-16T15:48:13+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:157[0m[36m >[0m proxy server is starting... [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
+[90m2022-01-16T15:48:13+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:172[0m[36m >[0m proxy server is ready to handle requests at '127.0.0.1:44625' [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
+Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3001 for circuit id c7i30bfg8s2mfjuqo410 
+Received key exchange response on the channel c7i30bfg8s2mfjuqo410
+Verified key exchange response on the channel c7i30bfg8s2mfjuqo410
+Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3001 for circuit id c7i30bfg8s2mfjuqo410 
+Received key exchange response on the channel c7i30bfg8s2mfjuqo410
+Verified key exchange response on the channel c7i30bfg8s2mfjuqo410
+Received an onion of type keyexchangeresponse for proxy from 127.0.0.1:3001 for circuit id c7i30bfg8s2mfjuqo410 
+Received key exchange response on the channel c7i30bfg8s2mfjuqo410
+Verified key exchange response on the channel c7i30bfg8s2mfjuqo410
+The circuitId c7i30bfg8s2mfjuqo410 is already in the proxy circuits
+CREATED CIRCUIT
+
+[Proxy Circuit c7i30bfg8s2mfjuqo410] - first node 127.0.0.1:3000 - second node 127.0.0.1:3001

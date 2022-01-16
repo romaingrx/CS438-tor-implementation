@@ -150,6 +150,11 @@ func main() {
 						Usage: "The filename containing all directory nodes",
 						Value: "directory.txt",
 					},
+					&urfave.BoolFlag{
+						Name:  "proxy",
+						Usage: "If this node is a proxy or a relay",
+						Value: false,
+					},
 				},
 				Action: start,
 			},
@@ -248,6 +253,15 @@ func start(c *urfave.Context) error {
 	if err != nil {
 		return xerrors.Errorf("failed to start and listen: %v", err)
 	}
+
+	if c.Bool("proxy") {
+		fmt.Println("CREATE CIRCUIT")
+		fmt.Println(node.CreateRandomCircuit())
+		fmt.Println("CREATED CIRCUIT")
+	}
+
+	time.Sleep(5 * time.Second)
+	fmt.Println(node.StringCircuits())
 
 	<-notify
 	log.Info().Msg("closing...")
