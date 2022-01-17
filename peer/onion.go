@@ -9,4 +9,6 @@ type Onion interface {
 	StartSyncDirectoryKeys() error
 	StartProxy()
 	SendMetrics(string)
+	SetLoggerServer(string)
+	StartProxyServer(port string)
 }

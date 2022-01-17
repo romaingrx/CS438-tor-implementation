@@ -356,3 +356,9 @@ func (m *ConcurrentMapChanMessage) Contains(key string) bool {
 	m.Unlock()
 	return ok
 }
+
+type MessageRequest struct {
+	Type string `json:"type"`
+	Url  string `json:"url"`
+	Data []byte `json:"body"`
+}

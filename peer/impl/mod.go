@@ -2,16 +2,20 @@ package impl
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"go.dedis.ch/cs438/crypto"
 
 	"go.dedis.ch/cs438/peer"
@@ -127,6 +131,8 @@ type node struct {
 	proxiesLock         sync.RWMutex
 	relaysLock          sync.RWMutex
 	torDataMessagesLock sync.RWMutex
+	loggerServer        string
+	isProxy             bool
 
 	circuitSelectionQuit chan struct{}
 }
@@ -158,6 +164,8 @@ func (n *node) Start() error {
 		return err
 	}
 	n.StartSyncDirectoryKeys()
+
+	n.LogMessage(fmt.Sprintf("Starting Node"))
 	return nil
 }
 
@@ -168,12 +176,19 @@ func (n *node) StartProxy() {
 	// n.PerformCircuitDeletionBackground()
 
 	n.PerformCircuitSelectionBackground()
+	n.isProxy = true
+
+	n.LogMessage(fmt.Sprintf("Tagging Node as Proxy"))
 }
 
 func (n *node) StartSyncDirectoryKeys() error {
 	startTime := time.Now()
 	fmt.Println("Start fetching the keys")
-	defer func() { fmt.Printf("Fetched all keys in %f seconds\n", time.Since(startTime).Seconds()) }()
+	n.LogMessage(fmt.Sprintf("Fetching Directory Information"))
+	defer func() {
+		fmt.Printf("Fetched all keys in %f seconds\n", time.Since(startTime).Seconds())
+		n.LogMessage(fmt.Sprintf("Fetched Directory Information"))
+	}()
 	filename := n.conf.DirectoryFilename
 	fd, err := os.Open(filename)
 	if err != nil {
@@ -186,6 +201,7 @@ func (n *node) StartSyncDirectoryKeys() error {
 		n.AddPeer(scanner.Text())
 	}
 
+	fmt.Println("Start fetching the keys 1")
 	stillNeedToFetch := make(map[string]string)
 	n.Lock()
 	for k, v := range n.routingTable {
@@ -195,10 +211,12 @@ func (n *node) StartSyncDirectoryKeys() error {
 		stillNeedToFetch[k] = v
 	}
 	n.Unlock()
+
+	fmt.Println("Start fetching the keys 2")
 	for len(stillNeedToFetch) > 0 {
 		for ip, _ := range stillNeedToFetch {
 			if n.directory.Exists(ip) {
-				// fmt.Println("Received the key for ip ", ip)
+				fmt.Println("Received the key for ip ", ip)
 				delete(stillNeedToFetch, ip)
 			} else {
 				request := types.NodeInfoMessage{Request: true}
@@ -602,4 +620,75 @@ func (n *node) Broadcast(msg transport.Message) error {
 	}
 
 	return nil
+}
+
+func (n *node) SetLoggerServer(url string) {
+	n.loggerServer = url
+}
+
+func (n *node) LogMessage(msg string) {
+
+	go func() {
+		postBody, _ := json.Marshal(map[string]string{
+			"ip":      n.conf.Socket.GetAddress(),
+			"message": msg,
+		})
+
+		reqBody := bytes.NewBuffer(postBody)
+		http.Post(n.loggerServer, "application/json", reqBody)
+	}()
+
+}
+
+func (n *node) StartProxyServer(port string) {
+	app := fiber.New()
+
+	// app.Use("/ws", func(c *fiber.Ctx) error {
+	// 	// IsWebSocketUpgrade returns true if the client
+	// 	// requested upgrade to the WebSocket protocol.
+	// 	if websocket.IsWebSocketUpgrade(c) {
+	// 		c.Locals("allowed", true)
+	// 		return c.Next()
+	// 	}
+	// 	return fiber.ErrUpgradeRequired
+	// })
+
+	app.Post("/message", func(c *fiber.Ctx) error {
+		u := new(MessageRequest)
+		if err := c.BodyParser(u); err != nil {
+			return c.Status(400).SendString(err.Error())
+		}
+		go n.SendMessage(u.Type, u.Url, "", u.Data)
+		return c.SendString("Sent")
+	})
+
+	// app.Get("/ws/:id", websocket.New(func(c *websocket.Conn) {
+	// 	// c.Locals is added to the *websocket.Conn
+	// 	fmt.Println(c.Locals("allowed"))  // true
+	// 	fmt.Println(c.Params("id"))       // 123
+	// 	fmt.Println(c.Query("v"))         // 1.0
+	// 	fmt.Println(c.Cookies("session")) // ""
+
+	// 	// websocket.Conn bindings https://pkg.go.dev/github.com/fasthttp/websocket?tab=doc#pkg-index
+	// 	var (
+	// 		mt  int
+	// 		msg []byte
+	// 		err error
+	// 	)
+	// 	for {
+	// 		if mt, msg, err = c.ReadMessage(); err != nil {
+	// 			fmt.Println("read:", err)
+	// 			break
+	// 		}
+	// 		fmt.Printf("recv: %s", msg)
+
+	// 		if err = c.WriteMessage(mt, msg); err != nil {
+	// 			fmt.Println("write:", err)
+	// 			break
+	// 		}
+	// 	}
+
+	// }))
+
+	fmt.Println(app.Listen(port))
 }

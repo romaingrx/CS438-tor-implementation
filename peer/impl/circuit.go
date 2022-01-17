@@ -126,6 +126,7 @@ func (n *node) CreateCircuit(nodes []string) error {
 
 	}
 
+	n.LogMessage(fmt.Sprintf("Proxy Circuit Created with id %s and nodes %s in %f seconds\n", proxyCircuit.id, nodes, time.Since(startTime).Seconds()))
 	fmt.Printf("Proxy Circuit Created with id %s and nodes %s in %f seconds\n", proxyCircuit.id, nodes, time.Since(startTime).Seconds())
 	return n.addProxyCircuit(proxyCircuit)
 }
@@ -857,6 +858,8 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 
 	fmt.Printf("Received Data Request Message with Circuit id %s", dataRequestMsg.CircuitId)
 
+	// n.LogMessage(fmt.Sprintf("Received Data Request Message with Circuit id %s", dataRequestMsg.CircuitId))
+
 	if relayCircuit.nextCircuit != nil {
 		// If this is a relay node then forward message
 
@@ -873,6 +876,8 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 			return xerrors.Errorf("Error forwarding data request for circuit id %s\n", dataRequestMsg.CircuitId)
 		}
 
+		n.LogMessage(fmt.Sprintf("Message Relayed to node %s", relayCircuit.nextCircuit.secondNode.IP))
+
 		return nil
 	}
 
@@ -884,6 +889,8 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 	if err != nil {
 		return xerrors.Errorf("Error unmarshaling data Request for circuit id %s\n", dataRequestMsg.CircuitId)
 	}
+
+	n.LogMessage(fmt.Sprintf("Message Received at exit node. Connecting to http server"))
 
 	var httpResponseBody []byte
 	if messageBody.RequestType == "GET" {
@@ -925,6 +932,8 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 		return xerrors.Errorf("Error sending data request for circuit id %s\n", dataResponse.CircuitId)
 	}
 
+	n.LogMessage(fmt.Sprintf("Connecting to http server succeeded, sending response back to origin"))
+
 	return nil
 
 }
@@ -937,6 +946,8 @@ func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Pac
 	}
 
 	fmt.Printf("Received Data Response Message with Circuit id %s\n", dataResponseMsg.CircuitId)
+
+	n.LogMessage(fmt.Sprintf("Received Data Relay Cell back on circuit %s", dataResponseMsg.CircuitId))
 
 	relayCircuit := n.getRelayCircuit(dataResponseMsg.CircuitId)
 	var proxyCircuit *ProxyCircuit
@@ -970,6 +981,8 @@ func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Pac
 		if err != nil {
 			return xerrors.Errorf("Error forwarding metric request for circuit id %s\n", dataResponseMsg.CircuitId)
 		}
+
+		n.LogMessage(fmt.Sprintf("Relaying cell back to %s", relayCircuit.beforeCircuit.firstNode.IP))
 
 		return nil
 	}
@@ -1035,6 +1048,8 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		Notify:            make(chan struct{}),
 	}
 
+	n.LogMessage(fmt.Sprintf("Initiating Sending Message"))
+
 	// Save message request in node
 	n.torDataMessagesLock.Lock()
 	n.messages[dataReq.UID] = &dataReq
@@ -1047,6 +1062,8 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		return nil, errors.New("no circuit selected for this message")
 	}
 
+	n.LogMessage(fmt.Sprintf("Selected Circuit %s for data transmission", c.id))
+
 	dataReqBody := &types.RelayDataRequestBody{
 		UID:             dataReq.UID,
 		DestinationIp:   dataReq.DestinationIp,
@@ -1057,6 +1074,7 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 
 	dataReqBodyBytes, err := json.Marshal(dataReqBody)
 	fmt.Printf("Sending this message %s\n", string(dataReqBodyBytes))
+
 	if err != nil {
 		return nil, errors.New("Error marshaling data request for circuit id " + c.id)
 	}
@@ -1081,6 +1099,7 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		return nil, errors.New("Error sending data request for circuit id " + dataRelayReq.CircuitId)
 	}
 
+	n.LogMessage(fmt.Sprintf("Message sent to first node %s", c.secondNode.IP))
 	// Every X minutes, each circuit gets sent a message that
 	// aids in calculating the RTT
 	currentRetryDuration := n.conf.DataMessageRetry
@@ -1101,6 +1120,7 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		n.torDataMessagesLock.Unlock()
 
 		if received {
+			n.LogMessage(fmt.Sprintf("Received response for request after %d ms with data: %s", dataReq.ReceivedTimeStamp.Sub(dataReq.SentTimeStamp).Milliseconds(), dataReq.ResponseData))
 			// fmt.Printf("Message sent here and got response '%s' after %d ms\n", dataReq.ResponseData, dataReq.ReceivedTimeStamp.Sub(dataReq.SentTimeStamp).Milliseconds())
 			n.RemoveProxyMessage(c, &dataReq)
 			return &dataReq, nil
