@@ -145,7 +145,7 @@
         if (e.preventDefault) e.preventDefault();
         console.log(e.target.elements.url.value)
         /* do what you want with the form */
-        $.post( "http://localhost:9000/message", { type: "GET", url: e.target.elements.url.value, data: "" } );
+        $.post( "http://127.0.0.1:9000/message", { type: "GET", url: e.target.elements.url.value, data: "" } );
         // You must return false to prevent the default form behavior
         return false;
     }

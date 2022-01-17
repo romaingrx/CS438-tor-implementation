@@ -4,9 +4,7 @@ go 1.16
 
 require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
-	github.com/fasthttp/websocket v1.4.5 // indirect
-	github.com/gofiber/fiber/v2 v2.24.0 // indirect
-	github.com/gofiber/websocket/v2 v2.0.15 // indirect
+	github.com/gofiber/fiber/v2 v2.24.0
 	github.com/klauspost/compress v1.14.1 // indirect
 	github.com/monnand/dhkx v0.0.0-20180522003156-9e5b033f1ac4
 	github.com/rs/xid v1.2.1

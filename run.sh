@@ -4,8 +4,8 @@ cd ourgui
 
 NUM_RELAYS=$1
 NUM_PROXIES=$2
-NUM_MESSAGES=$3
-NUM_PARALLEL=$4
+NUM_MESSAGES=10
+NUM_PARALLEL=5
 
 BEGIN_PORT=3000
 
@@ -35,6 +35,7 @@ for (( r=1; r<=$NUM_PROXIES; r++ ))
 do
 
 go run mod.go start --nodeaddr 127.0.0.1:$CURRENT_PORT --directoryfilename directory.txt --messages $NUM_MESSAGES --parallel $NUM_PARALLEL --proxy > ../logs/$CURRENT_PORT.log &
+# go run mod.go start --nodeaddr 127.0.0.1:$CURRENT_PORT --directoryfilename directory.txt --proxy > ../logs/$CURRENT_PORT.log &
 CURRENT_PORT=$((CURRENT_PORT+1))
 
 done

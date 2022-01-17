@@ -1,2 +1,27 @@
-[90m2022-01-17T02:01:04+01:00[0m [32mINF[0m [1mmod.go:219[0m[36m >[0m peer addr: '127.0.0.1:3000' [36mrole=[0m"cli node"
+[90m2022-01-17T23:42:28+01:00[0m [32mINF[0m [1mmod.go:219[0m[36m >[0m peer addr: '127.0.0.1:3000' [36mrole=[0m"cli node"
 Start fetching the keys
+Start fetching the keys 1
+Start fetching the keys 2
+Received the key for ip  127.0.0.1:3006
+Received the key for ip  127.0.0.1:3003
+Received the key for ip  127.0.0.1:3004
+Received the key for ip  127.0.0.1:3002
+Received the key for ip  127.0.0.1:3007
+Received the key for ip  127.0.0.1:3001
+Received the key for ip  127.0.0.1:3005
+Received the key for ip  127.0.0.1:3008
+Fetched all keys in 0.359919 seconds
+[90m2022-01-17T23:42:29+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:157[0m[36m >[0m proxy server is starting... [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
+[90m2022-01-17T23:42:29+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:172[0m[36m >[0m proxy server is ready to handle requests at '127.0.0.1:38511' [36mpeerAddr=[0m127.0.0.1:3000 [36mrole=[0m"proxy http"
+Exec the key request
+Extend the circuit  c7iv1lfg8s2u55jr65eg  to node  127.0.0.1:3001
+Forward relay for circuit  c7iv1lfg8s2u508clm9g
+Backward relay for circuit  c7iv1lfg8s2u55jr65eg
+
+[Relay Circuit c7iv1lfg8s2u55jr65eg] - first node 127.0.0.1:3006 - second node 127.0.0.1:3000
+[Relay Circuit c7iv1lfg8s2u508clm9g] - first node 127.0.0.1:3000 - second node 127.0.0.1:3001
+[90m2022-01-17T23:42:39+01:00[0m [32mINF[0m [1mmod.go:331[0m[36m >[0m closing... [36mrole=[0m"cli node"
+[90m2022-01-17T23:42:39+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:143[0m[36m >[0m proxy stopped [36mpeerAddr=[0m127.0.0.1:3000 [36mproxyAddr=[0m127.0.0.1:38511 [36mrole=[0m"proxy http"
+[90m2022-01-17T23:42:39+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:196[0m[36m >[0m proxy server is shutting down... [36mpeerAddr=[0m127.0.0.1:3000 [36mproxyAddr=[0m127.0.0.1:38511 [36mrole=[0m"proxy http"
+[90m2022-01-17T23:42:39+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:217[0m[36m >[0m server stopped [36mpeerAddr=[0m127.0.0.1:3000 [36mproxyAddr=[0m127.0.0.1:38511 [36mrole=[0m"proxy http"
+[90m2022-01-17T23:42:39+01:00[0m [32mINF[0m [1mhome/romaingrx/Nextcloud/EPFL/courses/CS-438 Distributed systems/project/gui/httpnode/mod.go:150[0m[36m >[0m node stopped [36mpeerAddr=[0m127.0.0.1:3000 [36mproxyAddr=[0m127.0.0.1:38511 [36mrole=[0m"proxy http"

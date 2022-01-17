@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -300,27 +301,27 @@ func start(c *urfave.Context) error {
 		node.StartProxy()
 		time.Sleep(5 * time.Second)
 		node.StartProxyServer(":9000")
-		// messages := c.Int("messages")
-		// parallel := c.Int("parallel")
+		messages := c.Int("messages")
+		parallel := c.Int("parallel")
 
-		// for i := 1; i <= messages; i += parallel {
-		// 	var wg sync.WaitGroup
-		// 	for j := i; j <= messages && j-i < parallel; j++ {
-		// 		wg.Add(1)
-		// 		go func(w *sync.WaitGroup) {
-		// 			defer w.Done()
-		// 			result, err := node.SendMessage("GET", "http://localhost:9999/", "", []byte(""))
-		// 			if err != nil {
-		// 				fmt.Printf("Error sending message %s", err.Error())
-		// 			} else {
-		// 				fmt.Printf("Message Response after %d microseconds with body %s\n", result.ReceivedTimeStamp.Sub(result.SentTimeStamp).Microseconds(), result.ResponseData)
-		// 			}
-		// 		}(&wg)
-		// 	}
-		// 	wg.Wait()
-		// }
+		for i := 1; i <= messages; i += parallel {
+			var wg sync.WaitGroup
+			for j := i; j <= messages && j-i < parallel; j++ {
+				wg.Add(1)
+				go func(w *sync.WaitGroup) {
+					defer w.Done()
+					result, err := node.SendMessage("GET", "http://localhost:9999/", "", []byte(""))
+					if err != nil {
+						fmt.Printf("Error sending message %s", err.Error())
+					} else {
+						fmt.Printf("Message Response after %d microseconds with body %s\n", result.ReceivedTimeStamp.Sub(result.SentTimeStamp).Microseconds(), result.ResponseData)
+					}
+				}(&wg)
+			}
+			wg.Wait()
+		}
 
-		// node.SendMetrics("http://localhost:9999/metrics")
+		node.SendMetrics("http://localhost:9999/metrics")
 	}
 
 	time.Sleep(10 * time.Second)
