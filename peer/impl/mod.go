@@ -45,8 +45,6 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		keyExchangeChan: ConcurrentMapChanMessage{items: make(map[string]chan types.Message), opened: make(map[string]bool)},
 		directory:       NewNodesInfo(),
 		messages:        make(map[string]*types.RelayHttpRequest),
-
-		// TODO tor ahmad: Create the structs
 	}
 	n.paxos = *n.NewPaxos(conf.PaxosID, conf.TotalPeers)
 	var err error
@@ -159,13 +157,23 @@ func (n *node) Start() error {
 	if err != nil {
 		return err
 	}
+	n.StartSyncDirectoryKeys()
+	return nil
+}
 
-	return n.StartSyncDirectoryKeys()
+func (n *node) StartProxy() {
+
+	n.PerformCircuitCreationBackground()
+
+	// n.PerformCircuitDeletionBackground()
+
+	n.PerformCircuitSelectionBackground()
 }
 
 func (n *node) StartSyncDirectoryKeys() error {
+	startTime := time.Now()
 	fmt.Println("Start fetching the keys")
-	defer func() { fmt.Println("Fetched all keys") }()
+	defer func() { fmt.Printf("Fetched all keys in %f seconds\n", time.Since(startTime).Seconds()) }()
 	filename := n.conf.DirectoryFilename
 	fd, err := os.Open(filename)
 	if err != nil {
@@ -189,7 +197,7 @@ func (n *node) StartSyncDirectoryKeys() error {
 	for len(stillNeedToFetch) > 0 {
 		for ip, _ := range stillNeedToFetch {
 			if n.directory.Exists(ip) {
-				fmt.Println("Received the key for ip ", ip)
+				// fmt.Println("Received the key for ip ", ip)
 				delete(stillNeedToFetch, ip)
 			} else {
 				request := types.NodeInfoMessage{Request: true}
@@ -203,7 +211,7 @@ func (n *node) StartSyncDirectoryKeys() error {
 				}
 			}
 		}
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	return nil

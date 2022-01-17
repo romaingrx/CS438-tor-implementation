@@ -88,7 +88,11 @@ type Configuration struct {
 	DataMessageTimeout    time.Duration
 	CircuitSelectAlgo     CircuitSelectAlgorithm
 
-	DirectoryFilename string
+	DirectoryFilename   string
+	MinimumCircuits     int
+	MaximumCircuits     int
+	CircuitUpdateTicker time.Duration
+	LastUsedUnvalid     time.Duration
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must

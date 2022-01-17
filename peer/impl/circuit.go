@@ -1,10 +1,14 @@
 package impl
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"math"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -56,13 +60,14 @@ func (n *node) CreateCircuit(nodes []string) error {
 	//      --- OnionLayerMessage(Encrypt(KeyExchangeRequestMessage(Pk2), Sk1))  ---> Decrypt(..., Sk1) ---- KeyExchangeRequestMessage(Pk2)  --->
 	//     <--- OnionLayerMessage(Encrypt(KeyExchangeResponseMessage(Sk2), Sk1)) <--- Encrypt(..., Sk1) <--- KeyExchangeResponseMessage(Sk2) ---
 	// ...
+	startTime := time.Now()
 
 	proxyCircuit := NewProxyCircuit(
 		xid.New().String(),
 		n.directory.GetNodeInfo(n.conf.Socket.GetAddress()),
 		n.directory.GetNodeInfo(nodes[0]),
 	)
-	fmt.Println("Initial circuit id ", proxyCircuit.id)
+	// fmt.Println("Initial circuit id ", proxyCircuit.id)
 	err := n.addProxyCircuit(proxyCircuit)
 	if err != nil {
 		return err
@@ -102,12 +107,12 @@ func (n *node) CreateCircuit(nodes []string) error {
 
 		select {
 		case msg := <-*n.keyExchangeChan.Get(proxyCircuit.id):
-			fmt.Printf("Received key exchange response on the channel %s\n", proxyCircuit.id)
+			// fmt.Printf("Received key exchange response on the channel %s\n", proxyCircuit.id)
 			if reply, ok := msg.(types.KeyExchangeResponseMessage); ok {
 				if !n.VerifyKeyExchangeResponse(nod, reply) {
 					return xerrors.Errorf("Failed to verify the signature of a key exchange response from node %s", nod)
 				}
-				fmt.Printf("Verified key exchange response on the channel %s\n", proxyCircuit.id)
+				// fmt.Printf("Verified key exchange response on the channel %s\n", proxyCircuit.id)
 				KeyExchangeAlgo.HandleNegotiation(reply.Parameters)
 
 				// If every test passes, then add this node and the master secret in the circuit and continue
@@ -121,6 +126,7 @@ func (n *node) CreateCircuit(nodes []string) error {
 
 	}
 
+	fmt.Printf("Proxy Circuit Created with id %s and nodes %s in %f seconds\n", proxyCircuit.id, nodes, time.Since(startTime).Seconds())
 	return n.addProxyCircuit(proxyCircuit)
 }
 
@@ -498,7 +504,7 @@ func (n *node) ExecRelayMetricResponseMessage(msg types.Message, pkt transport.P
 		// Forward it to previous circuit
 
 		//Encrypt it first
-		encryptedMsg, err := EncryptRelay(*relayCircuit, metricResponseMsg.Payload)
+		encryptedMsg, err := EncryptRelay(*relayCircuit.beforeCircuit, metricResponseMsg.Payload)
 		if err != nil {
 			return errors.New(fmt.Sprint("Couldn't encrypt relay metric response message with circuit id %s", metricResponseMsg.CircuitId))
 		}
@@ -549,8 +555,12 @@ func (n *node) RTT_Received(metricsResponseMessage *types.RelayMetricResponseMes
 	proxyCircuit.currentRtt = time.Since(proxyCircuit.lastMetricTimestamp)
 	if proxyCircuit.rttMin == nil {
 		proxyCircuit.rttMin = new(time.Duration)
-		*proxyCircuit.rttMin = proxyCircuit.currentRtt
+		*(proxyCircuit.rttMin) = proxyCircuit.currentRtt
 		return // No need to calculate congestion if this is the first trip
+	} else {
+		if *(proxyCircuit.rttMin) > proxyCircuit.currentRtt {
+			*(proxyCircuit.rttMin) = proxyCircuit.currentRtt
+		}
 	}
 
 	currentCtt := proxyCircuit.currentRtt - *proxyCircuit.rttMin
@@ -565,8 +575,57 @@ func (n *node) RTT_Received(metricsResponseMessage *types.RelayMetricResponseMes
 		total += float64(val)
 	}
 
-	proxyCircuit.cttAverage = time.Duration((total) / float64(len(proxyCircuit.ctt)))
+	if total != 0 {
+		proxyCircuit.cttAverage = time.Duration((total) / float64(len(proxyCircuit.ctt)))
+	}
 
+	n.PrintProxyMetrics(proxyCircuit)
+
+}
+
+func (n *node) PrintProxyMetrics(proxy *ProxyCircuit) {
+	fmt.Printf("Circuit %s has rtt_min %d, rtt_current %d, ctt_avg %d\n", proxy.id, *proxy.rttMin, proxy.currentRtt, proxy.cttAverage)
+}
+
+func (n *node) PerformCircuitCreationBackground() {
+	go func() {
+		for {
+			nCircuits := n.GetNumberOfProxyCircuits()
+			// fmt.Println("Number of circuit ", nCircuits)
+			// fmt.Println("Maximum number of circuit ", n.conf.MaximumCircuits)
+			if nCircuits < n.conf.MaximumCircuits {
+				for i := 0; i < n.conf.MaximumCircuits-nCircuits; i++ {
+					// fmt.Println("Create a circuit")
+					n.CreateRandomCircuit()
+				}
+			}
+
+			time.Sleep(n.conf.CircuitUpdateTicker)
+		}
+	}()
+}
+
+func (n *node) PerformCircuitDeletionBackground() {
+	go func() {
+		time.Sleep(120 * time.Second)
+		for {
+			n.proxiesLock.Lock()
+			nCircuits := n.GetNumberOfProxyCircuits()
+			if nCircuits > n.conf.MinimumCircuits {
+				circuits := n.GetAllProxyCircuitsSorted(func(circuitIdx1, circuitIdx2 int) bool {
+					return n.proxyCircuits[circuitIdx1].lastUsed.Before(n.proxyCircuits[circuitIdx2].lastUsed)
+				}, false)
+				for i := 1; i < n.conf.MinimumCircuits-nCircuits; i++ {
+					if time.Now().Sub(circuits[i].lastUsed) > n.conf.LastUsedUnvalid && len(circuits[i].associatedMessage) == 0 {
+						n.deleteProxyCircuit(circuits[i].id)
+					}
+				}
+			}
+			n.proxiesLock.Unlock()
+
+			time.Sleep(n.conf.CircuitUpdateTicker)
+		}
+	}()
 }
 
 func (n *node) PerformCircuitSelectionBackground() {
@@ -596,18 +655,27 @@ func (n *node) SelectCircuitRTT() *ProxyCircuit {
 
 	if len(n.proxyCircuits) < 1 {
 		return nil
-	} else if len(n.proxyCircuits) == 1 {
-		return n.proxyCircuits[0]
 	}
 
 	circuits := make([]*ProxyCircuit, len(n.proxyCircuits))
 	copy(circuits, n.proxyCircuits)
 
-	sort.SliceStable(circuits, func(i, j int) bool {
-		return circuits[i].currentRtt < circuits[j].currentRtt
+	var filtered []*ProxyCircuit
+	for _, proxy := range circuits {
+		if len(proxy.associatedMessage) < 5 {
+			filtered = append(filtered, proxy)
+		}
+	}
+
+	sort.SliceStable(filtered, func(i, j int) bool {
+		return filtered[i].currentRtt < filtered[j].currentRtt
 	})
 
-	return n.proxyCircuits[0]
+	if len(filtered) < 1 {
+		return nil
+	}
+
+	return filtered[0]
 }
 
 func (n *node) SelectCircuitCT() *ProxyCircuit {
@@ -616,18 +684,27 @@ func (n *node) SelectCircuitCT() *ProxyCircuit {
 
 	if len(n.proxyCircuits) < 1 {
 		return nil
-	} else if len(n.proxyCircuits) == 1 {
-		return n.proxyCircuits[0]
 	}
 
 	circuits := make([]*ProxyCircuit, len(n.proxyCircuits))
 	copy(circuits, n.proxyCircuits)
 
-	sort.SliceStable(circuits, func(i, j int) bool {
-		return circuits[i].cttAverage < circuits[j].cttAverage
+	var filtered []*ProxyCircuit
+	for _, proxy := range circuits {
+		if len(proxy.associatedMessage) < 5 {
+			filtered = append(filtered, proxy)
+		}
+	}
+
+	sort.SliceStable(filtered, func(i, j int) bool {
+		return filtered[i].cttAverage < filtered[j].cttAverage
 	})
 
-	return n.proxyCircuits[0]
+	if len(filtered) < 1 {
+		return nil
+	}
+
+	return filtered[0]
 }
 
 func (n *node) SelectCircuitCTRTT() *ProxyCircuit {
@@ -636,23 +713,36 @@ func (n *node) SelectCircuitCTRTT() *ProxyCircuit {
 
 	if len(n.proxyCircuits) < 1 {
 		return nil
-	} else if len(n.proxyCircuits) == 1 {
-		return n.proxyCircuits[0]
 	}
 
 	circuits := make([]*ProxyCircuit, len(n.proxyCircuits))
 	copy(circuits, n.proxyCircuits)
 
-	// Sort by CT first then for the first 2 choose the one with lowest RTT
-	sort.SliceStable(circuits, func(i, j int) bool {
-		return circuits[i].cttAverage < circuits[j].cttAverage
-	})
-
-	if circuits[0].currentRtt < circuits[1].currentRtt {
-		return n.proxyCircuits[0]
+	var filtered []*ProxyCircuit
+	for _, proxy := range circuits {
+		if len(proxy.associatedMessage) < 5 {
+			filtered = append(filtered, proxy)
+		}
 	}
 
-	return n.proxyCircuits[1]
+	// Sort by CT first then for the first 2 choose the one with lowest RTT
+	sort.SliceStable(filtered, func(i, j int) bool {
+		return filtered[i].cttAverage < filtered[j].cttAverage
+	})
+
+	if len(filtered) < 1 {
+		return nil
+	}
+
+	if len(filtered) == 1 {
+		return filtered[0]
+	}
+
+	if filtered[0].currentRtt < filtered[1].currentRtt {
+		return filtered[0]
+	}
+
+	return filtered[1]
 }
 
 func (n *node) SelectCircuitRTTCT() *ProxyCircuit {
@@ -661,23 +751,36 @@ func (n *node) SelectCircuitRTTCT() *ProxyCircuit {
 
 	if len(n.proxyCircuits) < 1 {
 		return nil
-	} else if len(n.proxyCircuits) == 1 {
-		return n.proxyCircuits[0]
 	}
 
 	circuits := make([]*ProxyCircuit, len(n.proxyCircuits))
 	copy(circuits, n.proxyCircuits)
 
-	// Sort by RTT first then for the first 2 choose the one with lowest CT
-	sort.SliceStable(circuits, func(i, j int) bool {
-		return circuits[i].currentRtt < circuits[j].currentRtt
-	})
-
-	if circuits[0].cttAverage < circuits[1].cttAverage {
-		return n.proxyCircuits[0]
+	var filtered []*ProxyCircuit
+	for _, proxy := range circuits {
+		if len(proxy.associatedMessage) < 5 {
+			filtered = append(filtered, proxy)
+		}
 	}
 
-	return n.proxyCircuits[1]
+	// Sort by RTT first then for the first 2 choose the one with lowest CT
+	sort.SliceStable(filtered, func(i, j int) bool {
+		return filtered[i].currentRtt < filtered[j].currentRtt
+	})
+
+	if len(filtered) < 1 {
+		return nil
+	}
+
+	if len(filtered) == 1 {
+		return filtered[0]
+	}
+
+	if filtered[0].cttAverage < filtered[1].cttAverage {
+		return filtered[0]
+	}
+
+	return filtered[1]
 }
 
 func (n *node) SelectCircuit(request *types.RelayHttpRequest) *ProxyCircuit {
@@ -701,8 +804,26 @@ func (n *node) SelectCircuit(request *types.RelayHttpRequest) *ProxyCircuit {
 	n.proxiesLock.Lock()
 	defer n.proxiesLock.Unlock()
 
-	proxy.associatedMessage = request
+	proxy.associatedMessage = append(proxy.associatedMessage, request)
+	proxy.lastUsed = time.Now()
 	return proxy
+}
+
+func (n *node) RemoveProxyMessage(proxy *ProxyCircuit, request *types.RelayHttpRequest) {
+	n.proxiesLock.Lock()
+	defer n.proxiesLock.Unlock()
+
+	for i, req := range proxy.associatedMessage {
+		if req == request {
+			if len(proxy.associatedMessage) < 2 {
+				proxy.associatedMessage = make([]*types.RelayHttpRequest, 0)
+			} else {
+				proxy.associatedMessage[i] = proxy.associatedMessage[len(proxy.associatedMessage)-1]
+				proxy.associatedMessage = proxy.associatedMessage[:len(proxy.associatedMessage)-1]
+			}
+			return
+		}
+	}
 }
 
 // End Circuit Selection
@@ -734,7 +855,7 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 		return xerrors.Errorf("Error decrypting data Request for circuit id %s\n", dataRequestMsg.CircuitId)
 	}
 
-	fmt.Printf("Received Data Request Message with Circuit id %s and payload %s", dataRequestMsg.CircuitId, string(decryptedPayload))
+	fmt.Printf("Received Data Request Message with Circuit id %s", dataRequestMsg.CircuitId)
 
 	if relayCircuit.nextCircuit != nil {
 		// If this is a relay node then forward message
@@ -764,11 +885,19 @@ func (n *node) ExecRelayDataRequestMessage(msg types.Message, pkt transport.Pack
 		return xerrors.Errorf("Error unmarshaling data Request for circuit id %s\n", dataRequestMsg.CircuitId)
 	}
 
+	var httpResponseBody []byte
+	if messageBody.RequestType == "GET" {
+		resp, _ := http.Get(messageBody.DestinationIp)
+		httpResponseBody, _ = ioutil.ReadAll(resp.Body)
+	} else if messageBody.RequestType == "POST" {
+		resp, _ := http.Post(messageBody.DestinationIp, "application/json", bytes.NewBuffer(messageBody.Data))
+		httpResponseBody, _ = ioutil.ReadAll(resp.Body)
+	}
 	// Should send message to http request here!
 
 	dataReplyBody := &types.RelayDataResponseBody{
 		UID:  messageBody.UID,
-		Data: messageBody.Data,
+		Data: httpResponseBody,
 	}
 
 	dataReplyBodyBytes, err := json.Marshal(dataReplyBody)
@@ -807,7 +936,7 @@ func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Pac
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	fmt.Printf("Received Data Response Message with Circuit id %s and payload %s", dataResponseMsg.CircuitId, string(dataResponseMsg.Payload))
+	fmt.Printf("Received Data Response Message with Circuit id %s\n", dataResponseMsg.CircuitId)
 
 	relayCircuit := n.getRelayCircuit(dataResponseMsg.CircuitId)
 	var proxyCircuit *ProxyCircuit
@@ -824,7 +953,7 @@ func (n *node) ExecRelayDataResponseMessage(msg types.Message, pkt transport.Pac
 		// Message received by a relay node
 		// Forward it to previous circuit
 
-		encryptedPayload, err := EncryptRelay(*relayCircuit, dataResponseMsg.Payload)
+		encryptedPayload, err := EncryptRelay(*relayCircuit.beforeCircuit, dataResponseMsg.Payload)
 		if err != nil {
 			return xerrors.Errorf("Error encrypting data Response for circuit id %s\n", dataResponseMsg.CircuitId)
 		}
@@ -872,7 +1001,7 @@ func (n *node) DataReceived(dataResponse *types.RelayDataResponseMessage) {
 		return
 	}
 
-	fmt.Printf("Response Received for request with id %s : %s\n", messageBody.UID, string(messageBody.Data))
+	// fmt.Printf("Response Received for request with id %s : %s\n", messageBody.UID, string(messageBody.Data))
 	//TODO tor: notify sender that response has been received
 	n.torDataMessagesLock.Lock()
 	msg := n.messages[messageBody.UID]
@@ -881,9 +1010,10 @@ func (n *node) DataReceived(dataResponse *types.RelayDataResponseMessage) {
 		return
 	}
 
-	msg.ResponseData = messageBody.Data
+	msg.ResponseData = string(messageBody.Data)
 	msg.ResponseReceived = true
 	msg.ReceivedTimeStamp = time.Now()
+	// fmt.Printf("Message received here and got response '%s' after %d ms\n", msg.ResponseData, msg.ReceivedTimeStamp.Sub(msg.SentTimeStamp).Milliseconds())
 	n.torDataMessagesLock.Unlock()
 
 	msg.Notify <- struct{}{}
@@ -891,14 +1021,14 @@ func (n *node) DataReceived(dataResponse *types.RelayDataResponseMessage) {
 }
 
 func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []byte) (*types.RelayHttpRequest, error) {
-	dataReq := &types.RelayHttpRequest{
+	dataReq := types.RelayHttpRequest{
 		UID:               xid.New().String(),
 		DestinationIp:     destinationIp,
 		DestinationPort:   port,
 		RequestType:       httpRequestType,
 		Data:              data,
 		Active:            true,
-		ResponseData:      nil,
+		ResponseData:      "",
 		ResponseReceived:  false,
 		SentTimeStamp:     time.Now(),
 		ReceivedTimeStamp: time.Time{},
@@ -907,11 +1037,11 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 
 	// Save message request in node
 	n.torDataMessagesLock.Lock()
-	n.messages[dataReq.UID] = dataReq
+	n.messages[dataReq.UID] = &dataReq
 	n.torDataMessagesLock.Unlock()
 
 	//Select circuit
-	c := n.SelectCircuit(dataReq)
+	c := n.SelectCircuit(&dataReq)
 
 	if c == nil {
 		return nil, errors.New("no circuit selected for this message")
@@ -926,7 +1056,7 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 	}
 
 	dataReqBodyBytes, err := json.Marshal(dataReqBody)
-	fmt.Printf("Sending this message %s", string(dataReqBodyBytes))
+	fmt.Printf("Sending this message %s\n", string(dataReqBodyBytes))
 	if err != nil {
 		return nil, errors.New("Error marshaling data request for circuit id " + c.id)
 	}
@@ -962,6 +1092,7 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		case <-ticker.C:
 			currentRetryDuration *= 2
 		case <-dataReq.Notify:
+			// fmt.Println("Notification received for response")
 			ticker.Stop()
 		}
 
@@ -970,7 +1101,9 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 		n.torDataMessagesLock.Unlock()
 
 		if received {
-			return dataReq, nil
+			// fmt.Printf("Message sent here and got response '%s' after %d ms\n", dataReq.ResponseData, dataReq.ReceivedTimeStamp.Sub(dataReq.SentTimeStamp).Milliseconds())
+			n.RemoveProxyMessage(c, &dataReq)
+			return &dataReq, nil
 		}
 
 		if currentRetryDuration > n.conf.DataMessageTimeout {
@@ -978,9 +1111,10 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 			dataReq.Active = false
 			n.torDataMessagesLock.Unlock()
 
+			n.RemoveProxyMessage(c, &dataReq)
 			// TODO tor: destroy circuit
 			// TODO tor: try different circuit if possible
-			return nil, errors.New("message response waiting timeout")
+			return nil, errors.New("request_timeout")
 		}
 
 	}
@@ -988,14 +1122,22 @@ func (n *node) SendMessage(httpRequestType, destinationIp, port string, data []b
 
 // End Messages/Data Relay
 
-func (n *node) GetAllProxyCircuits() []ProxyCircuit {
-	n.proxiesLock.Lock()
-	defer n.proxiesLock.Unlock()
+func (n *node) GetAllProxyCircuits(lock bool) []ProxyCircuit {
+	if lock {
+		n.proxiesLock.Lock()
+		defer n.proxiesLock.Unlock()
+	}
 	cp := make([]ProxyCircuit, len(n.proxyCircuits))
 	for idx, c := range n.proxyCircuits {
 		cp[idx] = *c
 	}
 	return cp
+}
+
+func (n *node) GetAllProxyCircuitsSorted(compareTo func(circuitIdx1, circuitIdx2 int) bool, lock bool) []ProxyCircuit {
+	copyCircuits := n.GetAllProxyCircuits(lock)
+	sort.SliceStable(copyCircuits, compareTo)
+	return copyCircuits
 }
 
 func (n *node) GetAllRelayCircuits() []RelayCircuit {
@@ -1007,6 +1149,13 @@ func (n *node) GetAllRelayCircuits() []RelayCircuit {
 	}
 	return cp
 }
+
+func (n *node) GetNumberOfProxyCircuits() int {
+	n.proxiesLock.Lock()
+	defer n.proxiesLock.Unlock()
+	return len(n.proxyCircuits)
+}
+
 func (c *ProxyCircuit) String() string {
 	return fmt.Sprintf(
 		"[Proxy Circuit %s] - first node %s - second node %s",
@@ -1027,11 +1176,45 @@ func (c *RelayCircuit) String() string {
 
 func (n *node) StringCircuits() string {
 	var s string
-	for _, c := range n.GetAllProxyCircuits() {
+	for _, c := range n.GetAllProxyCircuits(false) {
 		s = fmt.Sprintf("%s\n%s", s, c.String())
 	}
 	for _, c := range n.GetAllRelayCircuits() {
 		s = fmt.Sprintf("%s\n%s", s, c.String())
 	}
 	return s
+}
+
+func (n *node) SendMetrics(addr string) {
+
+	var min int64
+	min = math.MaxInt64
+	sum := int64(0)
+	count := int64(0)
+
+	n.torDataMessagesLock.Lock()
+	defer n.torDataMessagesLock.Unlock()
+
+	for _, msg := range n.messages {
+		fmt.Printf("Message info %s, %d, %d", msg.UID, msg.SentTimeStamp.Second(), msg.ReceivedTimeStamp.Second())
+		duration := msg.ReceivedTimeStamp.Sub(msg.SentTimeStamp).Microseconds()
+		if duration < min {
+			min = duration
+		}
+
+		sum += duration
+		count += 1
+	}
+
+	average := float64(sum) / float64(count)
+
+	postBody, _ := json.Marshal(map[string]string{
+		"ip":      n.conf.Socket.GetAddress(),
+		"average": fmt.Sprintf("%f", average),
+		"min":     fmt.Sprintf("%d", min),
+	})
+
+	fmt.Printf("Sending metrics %s to metrics server from %s", string(postBody), n.conf.Socket.GetAddress())
+	reqBody := bytes.NewBuffer(postBody)
+	http.Post(addr, "application/json", reqBody)
 }

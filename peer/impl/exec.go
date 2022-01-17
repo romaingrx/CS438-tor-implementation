@@ -3,15 +3,16 @@ package impl
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"regexp"
+	"sort"
+	"time"
+
 	"github.com/rs/xid"
 	"go.dedis.ch/cs438/crypto"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
-	"math/rand"
-	"regexp"
-	"sort"
-	"time"
 )
 
 func (n *node) execChatMessage(msg types.Message, pkt transport.Packet) error {
@@ -535,7 +536,6 @@ func (n *node) execKeyExchangeRequestMessage(msg types.Message, pkt transport.Pa
 			return err
 		}
 
-
 	} else if relayCircuit.nextCircuit == nil && keyExchangeRequestMsg.Extend != n.conf.Socket.GetAddress() {
 		// Add the new relay circuit with the next node
 		newRelayCircuit := RelayCircuit{
@@ -626,28 +626,28 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 	var err error
 
 	if proxyCircuit := n.getProxyCircuit(onion.CircuitId); proxyCircuit != nil {
-		fmt.Printf("Received an onion of type %s for proxy from %s for circuit id %s \n", onion.Type, pkt.Header.Source, onion.CircuitId)
+		// fmt.Printf("Received an onion of type %s for proxy from %s for circuit id %s \n", onion.Type, pkt.Header.Source, onion.CircuitId)
 		onion.Payload, err = UnpeelProxyOnionLayers(*onion, *proxyCircuit)
-		if err != nil{
+		if err != nil {
 			return err
 		}
 
 		if onion.Type == (types.KeyExchangeResponseMessage{}).Name() {
 			var keyExchangeResponseMsg types.KeyExchangeResponseMessage
 			err = json.Unmarshal(onion.Payload, &keyExchangeResponseMsg)
-			if err != nil{
+			if err != nil {
 				return err
 			}
 			keyExchangeResponseMsg.CircuitId = onion.CircuitId
 			onion.Payload, err = json.Marshal(keyExchangeResponseMsg)
-			if err != nil{
+			if err != nil {
 				return err
 			}
 		}
 
 		processedPkt := transport.Packet{
 			Header: pkt.Header,
-			Msg:    &transport.Message{
+			Msg: &transport.Message{
 				Type:    onion.Type,
 				Payload: onion.Payload,
 			},
@@ -659,7 +659,7 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 
 		return nil
 	} else if relayCircuit := n.getRelayCircuit(onion.CircuitId); relayCircuit != nil {
-		fmt.Printf("Received an onion of type %s for relay from %s for circuit id %s \n", onion.Type, pkt.Header.Source, onion.CircuitId)
+		// fmt.Printf("Received an onion of type %s for relay from %s for circuit id %s \n", onion.Type, pkt.Header.Source, onion.CircuitId)
 		var nextIP string
 		if onion.Direction == types.OnionLayerForward {
 			onion.Payload, err = crypto.Decrypt(relayCircuit.masterSecret, onion.Payload)
@@ -670,11 +670,10 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 			if relayCircuit.nextCircuit == nil {
 				var keyExchangeRequestMsg types.KeyExchangeRequestMessage
 				err := json.Unmarshal(onion.Payload, &keyExchangeRequestMsg)
-				if err != nil{
+				if err != nil {
 					return err
 				}
 				fmt.Println("Extend the circuit ", onion.CircuitId, " to node ", keyExchangeRequestMsg.Extend)
-
 
 				newRelayCircuit := RelayCircuit{
 					id:            xid.New().String(),
@@ -692,7 +691,7 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 
 				keyExchangeRequestMsg.CircuitId = newRelayCircuit.id
 				onion.Payload, err = json.Marshal(keyExchangeRequestMsg)
-				if err != nil{
+				if err != nil {
 					return err
 				}
 			}
@@ -730,7 +729,7 @@ func (n *node) execOnionLayerMessage(msg types.Message, pkt transport.Packet) er
 		}
 
 	} else {
-		fmt.Println("Received an onion with create from ", pkt.Header.Source, " for circuit id ", onion.CircuitId)
+		// fmt.Println("Received an onion with create from ", pkt.Header.Source, " for circuit id ", onion.CircuitId)
 		if onion.Type == types.KeyExchangeRequestMessage.Name(types.KeyExchangeRequestMessage{}) {
 			transportMsg := transport.Message{
 				Type:    onion.Type,

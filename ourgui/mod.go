@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -150,10 +151,40 @@ func main() {
 						Usage: "The filename containing all directory nodes",
 						Value: "directory.txt",
 					},
+					&urfave.IntFlag{
+						Name:  "minimumcircuits",
+						Usage: "The minimum number of circuits that can be randomly chosen",
+						Value: 3,
+					},
+					&urfave.IntFlag{
+						Name:  "maximumcircuits",
+						Usage: "The maximum number of circuits that can be randomly chosen",
+						Value: 5,
+					},
+					&urfave.DurationFlag{
+						Name:  "circuitupdateticker",
+						Usage: "The timeout after which the circuits are going to be updated",
+						Value: time.Second * 2,
+					},
+					&urfave.DurationFlag{
+						Name:  "lastusedunvalid",
+						Usage: "The timeout after which if the circuit is not used, it is deleted",
+						Value: time.Minute * 2,
+					},
 					&urfave.BoolFlag{
 						Name:  "proxy",
 						Usage: "If this node is a proxy or a relay",
 						Value: false,
+					},
+					&urfave.IntFlag{
+						Name:  "messages",
+						Usage: "number of messages to send",
+						Value: 10,
+					},
+					&urfave.IntFlag{
+						Name:  "parallel",
+						Usage: "messages to send in parallel",
+						Value: 5,
 					},
 				},
 				Action: start,
@@ -235,7 +266,11 @@ func start(c *urfave.Context) error {
 		PaxosID:            paxosID,
 		PaxosProposerRetry: c.Duration("paxosproposerretry"),
 
-		DirectoryFilename: c.String("directoryfilename"),
+		DirectoryFilename:   c.String("directoryfilename"),
+		MinimumCircuits:     c.Int("minimumcircuits"),
+		MaximumCircuits:     c.Int("maximumcircuits"),
+		CircuitUpdateTicker: c.Duration("circuitupdateticker"),
+		LastUsedUnvalid:     c.Duration("lastusedunvalid"),
 
 		MetricMessageRetry:    time.Second * 5,
 		MetricMessageInterval: time.Second * 2,
@@ -261,19 +296,32 @@ func start(c *urfave.Context) error {
 	}
 
 	if c.Bool("proxy") {
-		fmt.Println("CREATE CIRCUIT")
-		fmt.Println(node.CreateRandomCircuit())
-		fmt.Println("CREATED CIRCUIT")
-		time.Sleep(2 * time.Second)
-		result, err := node.SendMessage("GET", "127.0.0.1", "9000", []byte("Hello Man"))
-		if err != nil {
-			fmt.Printf("Error sending message %s", err.Error())
-		} else {
-			fmt.Printf("Message sent at %s and got response %s at %s", result.SentTimeStamp.String(), string(result.Data), result.ReceivedTimeStamp.String())
+		node.StartProxy()
+		time.Sleep(5 * time.Second)
+		messages := c.Int("messages")
+		parallel := c.Int("parallel")
+
+		for i := 1; i <= messages; i += parallel {
+			var wg sync.WaitGroup
+			for j := i; j <= messages && j-i < parallel; j++ {
+				wg.Add(1)
+				go func(w *sync.WaitGroup) {
+					defer w.Done()
+					result, err := node.SendMessage("GET", "http://localhost:9999/", "", []byte(""))
+					if err != nil {
+						fmt.Printf("Error sending message %s", err.Error())
+					} else {
+						fmt.Printf("Message Response after %d microseconds with body %s\n", result.ReceivedTimeStamp.Sub(result.SentTimeStamp).Microseconds(), result.ResponseData)
+					}
+				}(&wg)
+			}
+			wg.Wait()
 		}
+
+		node.SendMetrics("http://localhost:9999/metrics")
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	fmt.Println(node.StringCircuits())
 
 	<-notify

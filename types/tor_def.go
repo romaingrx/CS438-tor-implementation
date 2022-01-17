@@ -11,7 +11,7 @@ type RelayHttpRequest struct {
 	DestinationPort   string
 	RequestType       string
 	Data              []byte
-	ResponseData      []byte
+	ResponseData      string
 	ResponseReceived  bool
 	Active            bool
 	SentTimeStamp     time.Time

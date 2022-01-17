@@ -2,7 +2,6 @@ package impl
 
 import (
 	"crypto/rsa"
-	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -238,11 +237,11 @@ func (m *NodesInfo) GetRandom(nb int, except []string) ([]string, error) {
 	}
 
 	var nodes []string
-	nodesIdx := rand.Perm(len(m.dic))[:nb]
+	nodesIdx := rand.Perm(len(pickDic))[:nb]
 	for _, idx := range nodesIdx {
 		nodes = append(nodes, pickDic[idx])
 	}
-	fmt.Println("Random nodes : ", nodes)
+	// fmt.Println("Random nodes : ", nodes)
 	return nodes, nil
 }
 
@@ -278,7 +277,7 @@ type RelayCircuit struct {
 // Also includes extra information including which nodes are connected and their shared keys as well as metrics used for circuit selection
 type ProxyCircuit struct {
 	RelayCircuit
-	associatedMessage   *types.RelayHttpRequest //In case we've actually started sending a message through this circuit
+	associatedMessage   []*types.RelayHttpRequest //In case we've actually started sending a message through this circuit
 	created             time.Time
 	lastUsed            time.Time
 	lastMetricMessage   string          //Refers to message id of the last metric message

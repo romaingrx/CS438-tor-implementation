@@ -1,18 +1,2 @@
-[90m2022-01-16T20:50:07+01:00[0m [32mINF[0m [1mmod.go:188[0m[36m >[0m peer addr: '127.0.0.1:3001' [36mrole=[0m"cli node"
+[90m2022-01-17T02:01:04+01:00[0m [32mINF[0m [1mmod.go:219[0m[36m >[0m peer addr: '127.0.0.1:3001' [36mrole=[0m"cli node"
 Start fetching the keys
-Received the key for ip  127.0.0.1:3000
-Received the key for ip  127.0.0.1:3002
-Received the key for ip  127.0.0.1:3003
-Received an onion with create from  127.0.0.1:3003  for circuit id  c7i7dsb14gua52nsqkag
-Exec the key request
-Received an onion of type keyexchangerequest for relay from 127.0.0.1:3003 for circuit id c7i7dsb14gua52nsqkag 
-Extend the circuit  c7i7dsb14gua52nsqkag  to node  127.0.0.1:3002
-Forward relay for circuit  c7i7dsb14gua51ihfuu0
-Received an onion of type keyexchangeresponse for relay from 127.0.0.1:3002 for circuit id c7i7dsb14gua51ihfuu0 
-Backward relay for circuit  c7i7dsb14gua52nsqkag
-Fetched all keys
-[90m2022-01-16T20:50:09+01:00[0m [32mINF[0m [1mhome/ahmad/Documents/Fall21/DSE/CS438-tor-implementation/gui/httpnode/mod.go:157[0m[36m >[0m proxy server is starting... [36mpeerAddr=[0m127.0.0.1:3001 [36mrole=[0m"proxy http"
-[90m2022-01-16T20:50:09+01:00[0m [32mINF[0m [1mhome/ahmad/Documents/Fall21/DSE/CS438-tor-implementation/gui/httpnode/mod.go:172[0m[36m >[0m proxy server is ready to handle requests at '127.0.0.1:43157' [36mpeerAddr=[0m127.0.0.1:3001 [36mrole=[0m"proxy http"
-Received Data Request Message with Circuit id c7i7dsb14gua52nsqkag and payload ˜Ûc©Œm'çP„4½©XI#H?±I7·AízI¡‘‘„4¼˜ê-ø“*ÅW}–†dÕ6Å¡Ù”¥?}4Nó…SÜÊŞ‡!£9ög%»]m"mÚÊ7eÁi~"9Î¡cˆˆ~¯qpÉfF]’fJMÿi€šë?››œ¨ûÛ"TñÓnìô¡7èa÷/öª9_ÔÛfÍReceived Data Response Message with Circuit id c7i7dsb14gua51ihfuu0 and payload Ê'=Ìo ÇK÷Å©*-£\j°ßÙ9,ªææ1±Cnì«¡as_‹C4—šùìU˜oÃÿ?İò×oß–»®%ñó¿ğoÒæ?Rö$
-[Relay Circuit c7i7dsb14gua52nsqkag] - first node 127.0.0.1:3003 - second node 127.0.0.1:3001
-[Relay Circuit c7i7dsb14gua51ihfuu0] - first node 127.0.0.1:3001 - second node 127.0.0.1:3002
