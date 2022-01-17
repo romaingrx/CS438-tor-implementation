@@ -39,7 +39,7 @@ CURRENT_PORT=$((CURRENT_PORT+1))
 
 done
 
-sleep $((TOTAL*2))
+sleep 60
 
 for pid in $(netstat -tulpn | grep -Po '[0-9]*(?=\/mod)')
 do

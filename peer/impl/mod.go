@@ -187,13 +187,14 @@ func (n *node) StartSyncDirectoryKeys() error {
 	}
 
 	stillNeedToFetch := make(map[string]string)
+	n.Lock()
 	for k, v := range n.routingTable {
 		if k == n.conf.Socket.GetAddress() {
 			continue
 		}
 		stillNeedToFetch[k] = v
 	}
-
+	n.Unlock()
 	for len(stillNeedToFetch) > 0 {
 		for ip, _ := range stillNeedToFetch {
 			if n.directory.Exists(ip) {

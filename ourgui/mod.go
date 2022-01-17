@@ -275,8 +275,8 @@ func start(c *urfave.Context) error {
 		MetricMessageRetry:    time.Second * 5,
 		MetricMessageInterval: time.Second * 2,
 		DataMessageRetry:      time.Second * 4,
-		DataMessageTimeout:    time.Second * 10,
-		CircuitSelectAlgo:     peer.RTT,
+		DataMessageTimeout:    time.Second * 60,
+		CircuitSelectAlgo:     peer.CT_RTT,
 	}
 
 	node := peerFactory(conf)
